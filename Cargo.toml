@@ -1,6 +1,6 @@
 [package]
-name = "codeparse"
-version = "0.1.0"
+name = "snawly"
+version = "0.2.0"
 edition = "2024"
 resolver = "3"
 
@@ -10,8 +10,11 @@ tree-sitter-css = "0.25.0"
 tree-sitter-highlight = "0.26.5"
 tree-sitter-html = "0.23.2"
 tree-sitter-javascript = "0.25.0"
+tree-sitter-json = "0.24.8"
+tree-sitter-query = "0.1.0"
 tree-sitter-rstml = "2.0.0"
 tree-sitter-rust = "0.24.0"
+tree-sitter-toml = "0.20.0"
 tree-sitter-typescript = "0.23.2"
 tree-sitter-yaml = "0.7.2"
 

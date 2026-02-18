@@ -1,74 +1,16 @@
+mod config;
+mod names;
+
+use config::config_for;
+use names::NAMES;
+
 use convert_case::{Case, Casing};
-use std::{fs, path::Path};
-use tree_sitter_highlight::{Highlight, HighlightConfiguration, Highlighter, HtmlRenderer};
+use std::fs;
+use std::io::Write;
+use std::path;
+use tree_sitter_highlight::{Highlight, Highlighter, HtmlRenderer};
 
-pub const NAMES: &[&str] = &[
-    "function",
-    "attribute",
-    "string",
-    "comment",
-    "escape",
-    "constant",
-    "constructor",
-    "keyword",
-    "label",
-    "module",
-    "operator",
-    "property",
-    "punctuation",
-    "punctuation.bracket",
-    "punctuation.delimiter",
-    "tag",
-    "tag.attribute",
-    "tag.delimiter",
-    "number",
-    "variable",
-    "type",
-];
-
-fn rstml_config() -> HighlightConfiguration {
-    let mut config = HighlightConfiguration::new(
-        tree_sitter_rstml::language_rust_with_rstml(),
-        "rstml",
-        tree_sitter_rstml::HIGHLIGHTS_QUERY,
-        "",
-        "",
-    )
-    .unwrap();
-    config.configure(NAMES);
-
-    config
-}
-
-fn typescript_config() -> HighlightConfiguration {
-    let mut highlights = tree_sitter_typescript::HIGHLIGHTS_QUERY.to_owned();
-    highlights.push_str(tree_sitter_javascript::HIGHLIGHT_QUERY);
-    let mut config = HighlightConfiguration::new(
-        tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
-        "typescript",
-        &highlights,
-        "",
-        "",
-    )
-    .unwrap();
-    config.configure(NAMES);
-
-    config
-}
-
-fn css_config() -> HighlightConfiguration {
-    let mut config = HighlightConfiguration::new(
-        tree_sitter_css::LANGUAGE.into(),
-        "css",
-        &tree_sitter_css::HIGHLIGHTS_QUERY,
-        "",
-        "",
-    )
-    .unwrap();
-    config.configure(NAMES);
-
-    config
-}
+const HIGHLIGHTED_EXT: &str = "hhlt";
 
 fn apply_highlight(hl: Highlight, acc: &mut Vec<u8>) {
     let tag_index = hl.0;
@@ -80,11 +22,12 @@ fn apply_highlight(hl: Highlight, acc: &mut Vec<u8>) {
         format!(
             "class=\"text-{}\"",
             match *tag {
-                "type" => "dim-blue",
                 "tag" => "dim-yellow",
                 "function" => "dim-red",
+                "function.macro" => "green",
                 "tag.attribute" => "dim-cyan",
-                "number" | "variable" => "blue",
+                "type" | "type.builtin" => "dim-blue",
+                "number" | "variable" | "variable.parameter" => "blue",
                 "escape" | "constant" => "cyan",
                 "attribute" | "string" => "dim-green",
                 "constructor" | "keyword" | "module" => "dim-magenta",
@@ -100,78 +43,107 @@ fn apply_highlight(hl: Highlight, acc: &mut Vec<u8>) {
     )
 }
 
-fn make_components(file: &Path) -> String {
-    let dir_path = Path::new("codeblocks/").to_path_buf();
-    let file_name = Path::new(file.file_name().unwrap());
+fn make_components(file: &path::Path) -> Option<String> {
+    let dir_path = path::Path::new("codeblocks/").to_path_buf();
+    let file_name = path::Path::new(file.file_name()?);
 
-    let html_path = dir_path.join(file_name.with_extension("html"));
-    let html_path = html_path.to_str().unwrap();
+    let hhlt_path = dir_path.join(file_name.with_extension(HIGHLIGHTED_EXT));
+    let hhlt_path = hhlt_path.to_str()?;
+
     let component_path = dir_path.join(file_name);
-    let component_path = component_path.to_str().unwrap();
-    let component_name = file_name
-        .file_stem()
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_case(Case::Pascal);
+    let component_path = component_path.to_str()?;
+
+    let component_name = file_name.file_stem()?.to_str()?.to_case(Case::Pascal);
 
     format!(
         "\n#[component]
 pub fn {component_name}() -> impl IntoView {{
-    let code = include_str!(\"{html_path}\");
+    let code = include_str!(\"{hhlt_path}\");
     view! {{ <ux::Code code=code /> }}
 }}\n
 #[component]
 pub fn Fancy{component_name}() -> impl IntoView {{
-    let code = include_str!(\"{html_path}\");
+    let code = include_str!(\"{hhlt_path}\");
     let raw = include_str!(\"{component_path}\");
     view! {{ <ux::FancyCode code=code raw=raw /> }}
 }}\n"
     )
+    .into()
 }
 
-pub fn main() {
-    let dir = Path::new("../fwlr-io/src/codeblocks");
+pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = path::Path::new("../fwlr-io/src/codeblocks");
 
     let mut highlighter = Highlighter::new();
     let mut renderer = HtmlRenderer::new();
 
     let modfile_path = dir.to_path_buf().with_file_name("codeblock.rs");
-    let mut modfile = String::from("use crate::ux;\nuse leptos::prelude::*;\n");
+    fs::write(&modfile_path, "use crate::ux;\nuse leptos::prelude::*;\n")?;
+    let mut modfile = fs::OpenOptions::new().append(true).open(modfile_path)?;
 
-    for file in fs::read_dir(dir).unwrap().map(|f| f.unwrap()) {
-        let file_ext = file.path();
-        let file_ext = file_ext.extension().unwrap().to_str().unwrap();
-        if file_ext == "html" {
-            continue;
-        }
-
-        let source = fs::read_to_string(file.path()).unwrap();
-        let out_file = file.path().with_extension("html");
-
-        let config = match file_ext {
-            "rs" => rstml_config(),
-            "css" => css_config(),
-            "ts" => typescript_config(),
-            _ => {
-                eprintln!("filetype not recognised: {file_ext}");
-                break;
+    for entry in fs::read_dir(dir)? {
+        let file = entry?.path();
+        let file_ext = file
+            .extension()
+            .ok_or("no ext")?
+            .to_str()
+            .ok_or("not utf8")?;
+        match file.extension() {
+            Some(s) => {
+                if s == HIGHLIGHTED_EXT {
+                    continue;
+                }
             }
+            None => continue,
         };
-        let highlights = highlighter
-            .highlight(&config, source.as_bytes(), None, |_| None)
-            .unwrap();
+
+        let config = config_for(file_ext).ok_or("no config")?;
+        let source = fs::read_to_string(&file)?.into_bytes();
+
+        let highlights = highlighter.highlight(config, &source, None, |lang| config_for(lang))?;
 
         renderer.reset();
-        renderer
-            .render(highlights, source.as_bytes(), &apply_highlight)
-            .unwrap();
+        renderer.render(highlights, &source, &apply_highlight)?;
 
-        let html = String::from_utf8(renderer.html.clone()).unwrap();
-        let _ = fs::write(out_file, html);
-
-        modfile.push_str(&make_components(&file.path()));
+        let html = String::from_utf8(renderer.html.clone())?;
+        fs::write(file.with_extension(HIGHLIGHTED_EXT), html)?;
+        modfile.write_all(make_components(&file).ok_or("couldnt write")?.as_bytes())?;
     }
 
-    let _ = fs::write(modfile_path, modfile);
+    Ok(())
 }
+
+// #[derive(Debug)]
+// pub struct Err {}
+
+// impl<E> From<E> for Err
+// where
+//     E: std::fmt::Display,
+// {
+//     fn from(e: E) -> Self {
+//         eprintln!("{e}");
+//         Err {}
+//     }
+// }
+
+// impl Err {
+//     pub fn new(e: impl std::fmt::Display) -> Self {
+//         eprintln!("{e}");
+//         Err {}
+//     }
+// }
+// impl From<std::string::FromUtf8Error> for Err {
+//     fn from(e: std::string::FromUtf8Error) -> Self {
+//         Err::new(e)
+//     }
+// }
+// impl From<std::io::Error> for Err {
+//     fn from(e: std::io::Error) -> Self {
+//         Err::new(e)
+//     }
+// }
+// impl From<tree_sitter_highlight::Error> for Err {
+//     fn from(e: tree_sitter_highlight::Error) -> Self {
+//         Err::new(e)
+//     }
+// }

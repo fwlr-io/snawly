@@ -1,103 +1,66 @@
-mod config;
-mod names;
-
-use config::config_for;
-use names::NAMES;
+use snawly::config::config_for;
+use snawly::highlight::apply_highlight;
 
 use convert_case::{Case, Casing};
-use std::fs;
-use std::io::Write;
-use std::path;
-use tree_sitter_highlight::{Highlight, Highlighter, HtmlRenderer};
+use std::{env, fs, io::Write, path::Path};
+use tree_sitter_highlight::{Highlighter, HtmlRenderer};
 
 const HIGHLIGHTED_EXT: &str = "hhlt";
 
-fn apply_highlight(hl: Highlight, acc: &mut Vec<u8>) {
-    let tag_index = hl.0;
-    let Some(tag) = NAMES.get(tag_index) else {
-        eprintln!("unrecognised tag index: {tag_index}");
-        return;
-    };
-    acc.extend(
-        format!(
-            "class=\"text-{}\"",
-            match *tag {
-                "tag" => "dim-yellow",
-                "function" => "dim-red",
-                "function.macro" => "green",
-                "tag.attribute" => "dim-cyan",
-                "type" | "type.builtin" => "dim-blue",
-                "number" | "variable" | "variable.parameter" => "blue",
-                "escape" | "constant" => "cyan",
-                "attribute" | "string" => "dim-green",
-                "constructor" | "keyword" | "module" => "dim-magenta",
-                "comment" | "punctuation.delimiter" | "tag.delimiter" => "grey",
-                "label" | "operator" | "property" | "punctuation.bracket" => "dim-white",
-                _ => {
-                    eprintln!("unrecognised: {tag}");
-                    "yellow"
-                }
-            }
-        )
-        .as_bytes(),
-    )
+fn make_modfile(dir: &Path, name: &str) -> Result<fs::File, std::io::Error> {
+    fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(dir.to_path_buf().parent().unwrap().join(name))
 }
 
-fn make_components(file: &path::Path) -> Option<String> {
-    let dir_path = path::Path::new("codeblocks/").to_path_buf();
-    let file_name = path::Path::new(file.file_name()?);
-
-    let hhlt_path = dir_path.join(file_name.with_extension(HIGHLIGHTED_EXT));
+fn make_components(file: &Path, hhlt: &Path) -> Option<(String, String)> {
+    let dir_path = Path::new("codeblocks/");
+    let file_path = dir_path.join(file.file_name()?);
+    let file_path = file_path.to_str()?;
+    let hhlt_path = dir_path.join(hhlt.file_name()?);
     let hhlt_path = hhlt_path.to_str()?;
+    let component_name = file.file_stem()?.to_str()?.to_case(Case::Pascal);
 
-    let component_path = dir_path.join(file_name);
-    let component_path = component_path.to_str()?;
-
-    let component_name = file_name.file_stem()?.to_str()?.to_case(Case::Pascal);
-
-    format!(
-        "\n#[component]
-pub fn {component_name}() -> impl IntoView {{
+    let base_component = format!(
+        "#[component]
+pub fn {component_name}() -> IntoView {{
+    let raw = include_str!(\"{file_path}\");
     let code = include_str!(\"{hhlt_path}\");
-    view! {{ <ux::Code code=code /> }}
-}}\n
-#[component]
-pub fn Fancy{component_name}() -> impl IntoView {{
-    let code = include_str!(\"{hhlt_path}\");
-    let raw = include_str!(\"{component_path}\");
-    view! {{ <ux::FancyCode code=code raw=raw /> }}
-}}\n"
-    )
-    .into()
+",
+    );
+
+    Some((
+        format!("\n{base_component}\n    view! {{ <ux::PlainCode raw=raw code=code /> }}\n}}"),
+        format!("\n{base_component}\n    view! {{ <ux::FancyCode raw=raw code=code /> }}\n}}"),
+    ))
 }
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let dir = path::Path::new("../fwlr-io/src/codeblocks");
+    let dir = Path::new("../fwlr-io/src/codeblocks");
+    for from_file in env::args().skip(1) {
+        let to_file = dir.join(Path::new(&from_file).file_name().unwrap());
+        fs::copy(&from_file, &to_file)?;
+    }
+
+    let mut modfile = make_modfile(dir, "codeblock.rs")?;
+    modfile.write_all("use crate::ux;\nuse leptos::prelude::*;\n".as_bytes())?;
+
+    let mut fancy_modfile = make_modfile(dir, "fancy_codeblock.rs")?;
+    fancy_modfile.write_all("use crate::ux;\nuse leptos::prelude::*;\n".as_bytes())?;
 
     let mut highlighter = Highlighter::new();
     let mut renderer = HtmlRenderer::new();
 
-    let modfile_path = dir.to_path_buf().with_file_name("codeblock.rs");
-    fs::write(&modfile_path, "use crate::ux;\nuse leptos::prelude::*;\n")?;
-    let mut modfile = fs::OpenOptions::new().append(true).open(modfile_path)?;
-
     for entry in fs::read_dir(dir)? {
         let file = entry?.path();
-        let file_ext = file
-            .extension()
-            .ok_or("no ext")?
-            .to_str()
-            .ok_or("not utf8")?;
-        match file.extension() {
-            Some(s) => {
-                if s == HIGHLIGHTED_EXT {
-                    continue;
-                }
-            }
-            None => continue,
+        let file_ext = file.extension().unwrap().to_str().unwrap();
+        let hhlt = match file_ext {
+            HIGHLIGHTED_EXT => continue,
+            _ => file.with_extension(HIGHLIGHTED_EXT),
         };
 
-        let config = config_for(file_ext).ok_or("no config")?;
+        let config = config_for(file_ext).unwrap();
         let source = fs::read_to_string(&file)?.into_bytes();
 
         let highlights = highlighter.highlight(config, &source, None, |lang| config_for(lang))?;
@@ -105,45 +68,13 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         renderer.reset();
         renderer.render(highlights, &source, &apply_highlight)?;
 
-        let html = String::from_utf8(renderer.html.clone())?;
-        fs::write(file.with_extension(HIGHLIGHTED_EXT), html)?;
-        modfile.write_all(make_components(&file).ok_or("couldnt write")?.as_bytes())?;
+        let html = String::from_utf8(std::mem::take(&mut renderer.html))?;
+        let (component, fancy_component) = make_components(&file, &hhlt).unwrap();
+
+        fs::write(&hhlt, html)?;
+        modfile.write_all(component.as_bytes())?;
+        fancy_modfile.write_all(fancy_component.as_bytes())?;
     }
 
     Ok(())
 }
-
-// #[derive(Debug)]
-// pub struct Err {}
-
-// impl<E> From<E> for Err
-// where
-//     E: std::fmt::Display,
-// {
-//     fn from(e: E) -> Self {
-//         eprintln!("{e}");
-//         Err {}
-//     }
-// }
-
-// impl Err {
-//     pub fn new(e: impl std::fmt::Display) -> Self {
-//         eprintln!("{e}");
-//         Err {}
-//     }
-// }
-// impl From<std::string::FromUtf8Error> for Err {
-//     fn from(e: std::string::FromUtf8Error) -> Self {
-//         Err::new(e)
-//     }
-// }
-// impl From<std::io::Error> for Err {
-//     fn from(e: std::io::Error) -> Self {
-//         Err::new(e)
-//     }
-// }
-// impl From<tree_sitter_highlight::Error> for Err {
-//     fn from(e: tree_sitter_highlight::Error) -> Self {
-//         Err::new(e)
-//     }
-// }

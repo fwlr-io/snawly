@@ -26,17 +26,22 @@ fn modfile_components(file: &Path, hhlt: &Path) -> Option<(String, String)> {
     let hhlt_path = hhlt_path.to_str()?;
     let component_name = file.file_stem()?.to_str()?.to_case(Case::Pascal);
 
+    let props = "
+    #[prop(optional)] class: &'static str,
+    #[prop(optional)] container_class: &'static str
+";
     let base_component = format!(
         "#[component]
-pub fn {component_name}() -> impl IntoView {{
+pub fn {component_name}({props}) -> impl IntoView {{
     let raw = include_str!(\"{file_path}\");
     let code = include_str!(\"{hhlt_path}\");
 ",
     );
 
+    let spread_props = "raw=raw code=code class=class container_class=container_class";
     Some((
-        format!("\n{base_component}\n    view! {{ <ux::PlainCode raw=raw code=code /> }}\n}}"),
-        format!("\n{base_component}\n    view! {{ <ux::FancyCode raw=raw code=code /> }}\n}}"),
+        format!("\n{base_component}\n    view! {{ <ux::PlainCode {spread_props} /> }}\n}}"),
+        format!("\n{base_component}\n    view! {{ <ux::FancyCode {spread_props} /> }}\n}}"),
     ))
 }
 

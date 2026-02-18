@@ -46,7 +46,7 @@ pub fn {component_name}({props}) -> impl IntoView {{
 }
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let dir = Path::new("/Users/scottfowler/dev/fwlr-io/src/codeblocks");
+    let dir = Path::new("/Users/scottfowler/dev/website/src/codeblocks");
     for from_file in env::args().skip(1) {
         let to_file = dir.join(Path::new(&from_file).file_name().unwrap());
         fs::copy(&from_file, &to_file)?;

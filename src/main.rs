@@ -1,20 +1,24 @@
-use snawly::config::config_for;
-use snawly::highlight::apply_highlight;
-
 use convert_case::{Case, Casing};
 use std::{env, fs, io::Write, path::Path};
 use tree_sitter_highlight::{Highlighter, HtmlRenderer};
 
+pub mod highlight;
+use highlight::{apply_highlight, config_for};
+
 const HIGHLIGHTED_EXT: &str = "hhlt";
 
-fn make_modfile(dir: &Path, name: &str) -> Result<fs::File, std::io::Error> {
-    fs::OpenOptions::new()
+fn modfile(dir: &Path, filename: &str) -> Result<fs::File, std::io::Error> {
+    let path = dir.to_path_buf().parent().unwrap().join(filename);
+    fs::remove_file(&path)?;
+    let mut file = fs::OpenOptions::new()
         .append(true)
-        .create(true)
-        .open(dir.to_path_buf().parent().unwrap().join(name))
+        .create_new(true)
+        .open(&path)?;
+    file.write_all("use crate::ux;\nuse leptos::prelude::*;\n".as_bytes())?;
+    Ok(file)
 }
 
-fn make_components(file: &Path, hhlt: &Path) -> Option<(String, String)> {
+fn modfile_components(file: &Path, hhlt: &Path) -> Option<(String, String)> {
     let dir_path = Path::new("codeblocks/");
     let file_path = dir_path.join(file.file_name()?);
     let file_path = file_path.to_str()?;
@@ -24,7 +28,7 @@ fn make_components(file: &Path, hhlt: &Path) -> Option<(String, String)> {
 
     let base_component = format!(
         "#[component]
-pub fn {component_name}() -> IntoView {{
+pub fn {component_name}() -> impl IntoView {{
     let raw = include_str!(\"{file_path}\");
     let code = include_str!(\"{hhlt_path}\");
 ",
@@ -43,11 +47,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         fs::copy(&from_file, &to_file)?;
     }
 
-    let mut modfile = make_modfile(dir, "codeblock.rs")?;
-    modfile.write_all("use crate::ux;\nuse leptos::prelude::*;\n".as_bytes())?;
-
-    let mut fancy_modfile = make_modfile(dir, "fancy_codeblock.rs")?;
-    fancy_modfile.write_all("use crate::ux;\nuse leptos::prelude::*;\n".as_bytes())?;
+    let mut plain_modfile = modfile(&dir, "codeblock.rs")?;
+    let mut fancy_modfile = modfile(&dir, "fancy_codeblock.rs")?;
 
     let mut highlighter = Highlighter::new();
     let mut renderer = HtmlRenderer::new();
@@ -65,14 +66,14 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let highlights = highlighter.highlight(config, &source, None, |lang| config_for(lang))?;
 
-        renderer.reset();
         renderer.render(highlights, &source, &apply_highlight)?;
-
         let html = String::from_utf8(std::mem::take(&mut renderer.html))?;
-        let (component, fancy_component) = make_components(&file, &hhlt).unwrap();
+        renderer.reset();
+
+        let (plain_component, fancy_component) = modfile_components(&file, &hhlt).unwrap();
 
         fs::write(&hhlt, html)?;
-        modfile.write_all(component.as_bytes())?;
+        plain_modfile.write_all(plain_component.as_bytes())?;
         fancy_modfile.write_all(fancy_component.as_bytes())?;
     }
 

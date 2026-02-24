@@ -111,6 +111,7 @@ const COLORS: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("string.escape", "cyan"),
         ("constant", "cyan"),
         ("constant.builtin", "cyan"),
+        ("embedded", "dim-cyan"),
         ("tag.attribute", "dim-cyan"),
         ("number", "blue"),
         ("boolean", "blue"),

@@ -43,12 +43,11 @@ pub fn {component_name}({props}) -> impl IntoView {{
             code=code
             class=class
             container_class=container_class
-        />
-    }}";
+        />";
 
     Some((
-        format!("\n{base_component}\n        <ux::PlainCode {spread_props}\n}}"),
-        format!("\n{base_component}\n        <ux::FancyCode {spread_props}\n}}"),
+        format!("\n{base_component}\n        <ux::PlainCode {spread_props}\n    }}\n}}"),
+        format!("\n{base_component}\n        <ux::FancyCode {spread_props}\n    }}\n}}"),
     ))
 }
 

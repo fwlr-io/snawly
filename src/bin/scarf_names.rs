@@ -2,6 +2,7 @@ use fancy_regex::Regex;
 use std::collections::HashSet;
 
 const QUERIES: &[&str] = &[
+    tree_sitter_bash::HIGHLIGHT_QUERY,
     tree_sitter_css::HIGHLIGHTS_QUERY,
     tree_sitter_html::HIGHLIGHTS_QUERY,
     tree_sitter_javascript::HIGHLIGHT_QUERY,

@@ -25,6 +25,7 @@ pub fn config_for(name: &str) -> Option<&'static HighlightConfiguration> {
         "tsx" => &TSX,
         "yml" | "yaml" => &YAML,
         "rs" | "rust" => &RUST_WITH_RSTML, // todo: if contains `view!` macro; else just `rust`
+        "sh" | "shell" => &SHELL,
         x => {
             eprintln!("not a recognised extension: {x}");
             return None;
@@ -241,6 +242,19 @@ static _RUST: LazyLock<HighlightConfiguration> = LazyLock::new(|| {
         "rust",
         HIGHLIGHTS_QUERY,
         INJECTIONS_QUERY,
+        NO_LOCALS_QUERY,
+    )
+    .unwrap();
+    config.configure(NAMES);
+    config
+});
+static SHELL: LazyLock<HighlightConfiguration> = LazyLock::new(|| {
+    use tree_sitter_bash::*;
+    let mut config = HighlightConfiguration::new(
+        LANGUAGE.into(),
+        "shell",
+        HIGHLIGHT_QUERY,
+        NO_INJECTIONS_QUERY,
         NO_LOCALS_QUERY,
     )
     .unwrap();

@@ -35,13 +35,19 @@ fn modfile_components(file: &Path, hhlt: &Path) -> Option<(String, String)> {
 pub fn {component_name}({props}) -> impl IntoView {{
     let raw = include_str!(\"{file_path}\");
     let code = include_str!(\"{hhlt_path}\");
-",
-    );
 
-    let spread_props = "raw=raw code=code class=class container_class=container_class";
+    view! {{",
+    );
+    let spread_props = "
+        raw=raw
+        code=code
+        class=class
+        container_class=container_class
+    />";
+
     Some((
-        format!("\n{base_component}\n    view! {{ <ux::PlainCode {spread_props} /> }}\n}}"),
-        format!("\n{base_component}\n    view! {{ <ux::FancyCode {spread_props} /> }}\n}}"),
+        format!("\n{base_component}\n        <ux::PlainCode {spread_props}\n    }}\n}}"),
+        format!("\n{base_component}\n        <ux::FancyCode {spread_props}\n    }}\n}}"),
     ))
 }
 

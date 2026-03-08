@@ -243,6 +243,8 @@ dependencies = [
  "fancy-regex",
  "tree-sitter-bash",
  "tree-sitter-css",
+ "tree-sitter-csv",
+ "tree-sitter-dot",
  "tree-sitter-highlight",
  "tree-sitter-html",
  "tree-sitter-javascript",
@@ -294,9 +296,9 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter"
-version = "0.26.5"
+version = "0.26.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12987371f54efc9b9306a20dc87ed5aaee9f320c8a8b115e28515c412b2efe39"
+checksum = "13f456d2108c3fef07342ba4689a8503ec1fb5beed245e2b9be93096ef394848"
 dependencies = [
  "cc",
  "regex",
@@ -321,6 +323,22 @@ name = "tree-sitter-css"
 version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a5cbc5e18f29a2c6d6435891f42569525cf95435a3e01c2f1947abcde178686f"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-csv"
+version = "0.3.0"
+dependencies = [
+ "cc",
+ "tree-sitter",
+]
+
+[[package]]
+name = "tree-sitter-dot"
+version = "0.1.6"
 dependencies = [
  "cc",
  "tree-sitter-language",

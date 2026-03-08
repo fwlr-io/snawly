@@ -15,6 +15,8 @@ pub fn apply_highlight(hl: Highlight, acc: &mut Vec<u8>) {
 pub fn config_for(name: &str) -> Option<&'static HighlightConfiguration> {
     Some(match name {
         "css" => &CSS,
+        "csv" => &CSV,
+        "dot" | "gv" => &DOT,
         "html" => &HTML,
         "json" => &JSON,
         "js" | "javascript" => &JAVASCRIPT,
@@ -50,6 +52,7 @@ const NAMES: &[&str] = &[
     "definition.module",
     "doc",
     "embedded",
+    "error",
     "escape",
     "function",
     "function.builtin",
@@ -62,6 +65,7 @@ const NAMES: &[&str] = &[
     "local.scope",
     "module",
     "name",
+    "namespace",
     "none",
     "number",
     "operator",
@@ -98,6 +102,7 @@ const COLORS: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("module", "dim-magenta"),
         ("keyword", "dim-magenta"),
         ("constructor", "dim-magenta"),
+        ("error", "red"),
         ("tag.error", "red"),
         ("function", "dim-red"),
         ("function.method", "dim-red"),
@@ -112,6 +117,7 @@ const COLORS: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("constant", "cyan"),
         ("constant.builtin", "cyan"),
         ("embedded", "dim-cyan"),
+        ("namespace", "dim-cyan"),
         ("tag.attribute", "dim-cyan"),
         ("number", "blue"),
         ("boolean", "blue"),
@@ -138,6 +144,34 @@ static CSS: LazyLock<HighlightConfiguration> = LazyLock::new(|| {
         "css",
         HIGHLIGHTS_QUERY,
         NO_INJECTIONS_QUERY,
+        NO_LOCALS_QUERY,
+    )
+    .unwrap();
+    config.configure(NAMES);
+    config
+});
+
+static CSV: LazyLock<HighlightConfiguration> = LazyLock::new(|| {
+    use tree_sitter_csv::*;
+    let mut config = HighlightConfiguration::new(
+        language().into(),
+        "csv",
+        NO_HIGHLIGHTS_QUERY,
+        NO_INJECTIONS_QUERY,
+        NO_LOCALS_QUERY,
+    )
+    .unwrap();
+    config.configure(NAMES);
+    config
+});
+
+static DOT: LazyLock<HighlightConfiguration> = LazyLock::new(|| {
+    use tree_sitter_dot::*;
+    let mut config = HighlightConfiguration::new(
+        LANGUAGE.into(),
+        "dot",
+        HIGHLIGHTS_QUERY,
+        INJECTIONS_QUERY,
         NO_LOCALS_QUERY,
     )
     .unwrap();
@@ -321,5 +355,6 @@ static YAML: LazyLock<HighlightConfiguration> = LazyLock::new(|| {
     config
 });
 
+const NO_HIGHLIGHTS_QUERY: &str = "";
 const NO_INJECTIONS_QUERY: &str = "";
 const NO_LOCALS_QUERY: &str = "";

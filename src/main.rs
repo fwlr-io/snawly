@@ -7,18 +7,7 @@ use highlight::{apply_highlight, config_for};
 
 const HIGHLIGHTED_EXT: &str = "hhlt";
 
-fn modfile(dir: &Path, filename: &str) -> Result<fs::File, std::io::Error> {
-    let path = dir.to_path_buf().parent().unwrap().join(filename);
-    fs::remove_file(&path)?;
-    let mut file = fs::OpenOptions::new()
-        .append(true)
-        .create_new(true)
-        .open(&path)?;
-    file.write_all("use crate::ux;\nuse leptos::prelude::*;\n".as_bytes())?;
-    Ok(file)
-}
-
-fn modfile_components(file: &Path, hhlt: &Path) -> Option<(String, String)> {
+fn modfile_component(file: &Path, hhlt: &Path) -> Option<String> {
     let dir_path = Path::new("codeblocks/");
     let file_path = dir_path.join(file.file_name()?);
     let file_path = file_path.to_str()?;
@@ -27,6 +16,7 @@ fn modfile_components(file: &Path, hhlt: &Path) -> Option<(String, String)> {
     let component_name = file.file_stem()?.to_str()?.to_case(Case::Pascal);
 
     let props = "
+    #[prop(optional)] plain: bool,
     #[prop(optional)] class: &'static str,
     #[prop(optional)] container_class: &'static str,
 ";
@@ -41,13 +31,13 @@ pub fn {component_name}({props}) -> impl IntoView {{
     let spread_props = "
             raw=raw
             code=code
+            plain=plain
             class=class
             container_class=container_class
         />";
 
-    Some((
-        format!("\n{base_component}\n        <ux::PlainCode {spread_props}\n    }}\n}}"),
-        format!("\n{base_component}\n        <ux::FancyCode {spread_props}\n    }}\n}}"),
+    Some(format!(
+        "\n{base_component}\n        <ux::Code {spread_props}\n    }}\n}}\n"
     ))
 }
 
@@ -58,8 +48,13 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         fs::copy(&from_file, &to_file)?;
     }
 
-    let mut plain_modfile = modfile(&dir, "codeblock.rs")?;
-    let mut fancy_modfile = modfile(&dir, "fancy_codeblock.rs")?;
+    let path = &dir.to_path_buf().parent().unwrap().join("codeblock.rs");
+    fs::remove_file(&path)?;
+    let mut modfile = fs::OpenOptions::new()
+        .append(true)
+        .create_new(true)
+        .open(&path)?;
+    modfile.write_all("use crate::ux;\nuse leptos::prelude::*;\n".as_bytes())?;
 
     let mut highlighter = Highlighter::new();
     let mut renderer = HtmlRenderer::new();
@@ -81,11 +76,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let html = String::from_utf8(std::mem::take(&mut renderer.html))?;
         renderer.reset();
 
-        let (plain_component, fancy_component) = modfile_components(&file, &hhlt).unwrap();
-
+        let component = modfile_component(&file, &hhlt).unwrap();
         fs::write(&hhlt, html)?;
-        plain_modfile.write_all(plain_component.as_bytes())?;
-        fancy_modfile.write_all(fancy_component.as_bytes())?;
+        modfile.write_all(component.as_bytes())?;
     }
 
     Ok(())

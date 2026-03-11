@@ -8,36 +8,31 @@ use highlight::{apply_highlight, config_for};
 const HIGHLIGHTED_EXT: &str = "hhlt";
 
 fn modfile_component(file: &Path, hhlt: &Path) -> Option<String> {
+    let component_name = file.file_stem()?.to_str()?.to_case(Case::Pascal);
+
     let dir_path = Path::new("codeblocks/");
     let file_path = dir_path.join(file.file_name()?);
     let file_path = file_path.to_str()?;
     let hhlt_path = dir_path.join(hhlt.file_name()?);
     let hhlt_path = hhlt_path.to_str()?;
-    let component_name = file.file_stem()?.to_str()?.to_case(Case::Pascal);
-
-    let props = "
-    #[prop(optional)] plain: bool,
-    #[prop(optional)] class: &'static str,
-    #[prop(optional)] container_class: &'static str,
-";
-    let base_component = format!(
-        "#[component]
-pub fn {component_name}({props}) -> impl IntoView {{
-    let raw = include_str!(\"{file_path}\");
-    let code = include_str!(\"{hhlt_path}\");
-
-    view! {{",
-    );
-    let spread_props = "
-            raw=raw
-            code=code
-            plain=plain
-            class=class
-            container_class=container_class
-        />";
 
     Some(format!(
-        "\n{base_component}\n        <ux::Code {spread_props}\n    }}\n}}\n"
+        "
+#[component]
+pub fn {component_name}(
+    #[prop(optional)] plain: bool,
+    #[prop(optional)] class: &'static str,
+) -> impl IntoView {{
+    view! {{
+        <ux::Code
+            plain=plain
+            attr:class=class
+            raw=include_str!(\"{file_path}\")
+            code=include_str!(\"{hhlt_path}\")
+        />
+    }}
+}}
+"
     ))
 }
 

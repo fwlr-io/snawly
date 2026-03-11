@@ -1,0 +1,21 @@
+{
+  "name": "ghostty-cleaner-html",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "prettier": {
+    "semi": false,
+    "arrowParens": "avoid",
+    "trailingComma": "es5",
+    "experimentalTernaries": true
+  },
+  "dependencies": {
+    "change-case": "^5.4.4"
+  }
+}

@@ -13,27 +13,24 @@ const [_, __, ...args] = parseArgs({
     "termblock.rs",
     "use crate::ux::TermBox;\nuse leptos::prelude::*;\n"
   )
-  const modfileAppend = async (component: string) =>
-    await appendFile("termblock.rs", component, "utf-8")
 
-  for (let fname of args) {
-    let term = await Bun.file(fname).text()
+  for (let termFile of args) {
+    let hltFile = termFile.replace(/\.term$/, ".hlt")
+    let term = await Bun.file(termFile).text()
     let hlt = mapStyles(term)
-    if (hlt) {
-      let hltFile = fname.replace(/\.term$/, ".hlt")
-      let compName = pascalCase(
-        fname.replace(/^termblocks\//, "").replace(/\.term$/, "")
-      )
-      await Bun.write(hltFile, hlt)
-      await modfileAppend(
-        `
+    let compName = pascalCase(
+      termFile.replace(/^termblocks\//, "").replace(/\.term$/, "")
+    )
+    let component = `
 #[component]
 pub fn ${compName}(#[prop(optional)] tiny: bool) -> impl IntoView {
-    view! { <TermBox tiny=tiny hlt=include_str!("${hltFile}") /> }
+  view! { <TermBox tiny=tiny hlt=include_str!("${hltFile}") /> }
 }
 
 `
-      )
+    if (hlt) {
+      await Bun.write(hltFile, hlt)
+      appendFile("termblock.rs", component, "utf-8")
     }
   }
 })()

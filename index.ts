@@ -1,37 +1,39 @@
-import { mapStyles } from "./src/stylemap"
+import { mapStyles } from "./src/restyle"
 import { appendFile } from "fs/promises"
 import { pascalCase } from "change-case"
 import { parseArgs } from "util"
 
-const [_, __, ...targs] = parseArgs({
+const [_, __, ...args] = parseArgs({
   args: Bun.argv,
   allowPositionals: true,
 }).positionals
 
-let nameFrom = (out: string): string =>
-  pascalCase(out.replace("termblocks/", "").replace(".thlt", ""))
-
-let component = (out: string): string => `
-#[component]
-pub fn ${nameFrom(out)}() -> impl IntoView {
-  view! { <Term term=include_str!("${out}") /> }
-}
-
-`
-
 ;(async () => {
   await Bun.write(
     "termblock.rs",
-    "use crate::ux::Term;\nuse leptos::prelude::*;\n"
+    "use crate::ux::TermBox;\nuse leptos::prelude::*;\n"
   )
+  const modfileAppend = async (component: string) =>
+    await appendFile("termblock.rs", component, "utf-8")
 
-  for (let fname of targs) {
+  for (let fname of args) {
     let term = await Bun.file(fname).text()
-    let out = fname.replace(".term", ".thlt")
-    let { ok, res } = mapStyles(term)
-    if (ok) {
-      await Bun.write(out, res)
-      await appendFile("termblock.rs", component(out), "utf-8")
+    let hlt = mapStyles(term)
+    if (hlt) {
+      let hltFile = fname.replace(/\.term$/, ".hlt")
+      let compName = pascalCase(
+        fname.replace(/^termblocks\//, "").replace(/\.term$/, "")
+      )
+      await Bun.write(hltFile, hlt)
+      await modfileAppend(
+        `
+#[component]
+pub fn ${compName}(#[prop(optional)] tiny: bool) -> impl IntoView {
+    view! { <TermBox tiny=tiny hlt=include_str!("${hltFile}") /> }
+}
+
+`
+      )
     }
   }
 })()

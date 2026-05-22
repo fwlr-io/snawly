@@ -77,6 +77,7 @@ fn highlight_codeblocks(from_files: Vec<String>) -> Result<(), Box<dyn std::erro
 }
 
 fn restyle_termblocks(_from_files: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
+    // translate index.ts
     Ok(())
 }
 

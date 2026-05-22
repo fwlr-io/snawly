@@ -5,6 +5,9 @@ use tree_sitter_highlight::{Highlighter, HtmlRenderer};
 pub mod highlight;
 use highlight::{apply_highlight, config_for};
 
+pub mod termstyle;
+use termstyle::restyle;
+
 const HIGHLIGHTED_EXT: &str = "hlt";
 
 fn modfile_component(file: &Path, hlt: &Path) -> Option<String> {
@@ -31,9 +34,9 @@ pub fn {component_name}() -> impl IntoView {{
     ))
 }
 
-pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn highlight_codeblocks(from_files: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
     let dir = Path::new("/Users/scottfowler/dev/website/src/codeblocks");
-    for from_file in env::args().skip(1) {
+    for from_file in from_files {
         let to_file = dir.join(Path::new(&from_file).file_name().unwrap());
         fs::copy(&from_file, &to_file)?;
     }
@@ -70,6 +73,19 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         fs::write(&hlt, html)?;
         modfile.write_all(component.as_bytes())?;
     }
+    Ok(())
+}
 
+fn restyle_termblocks(_from_files: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
+    Ok(())
+}
+
+pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let sources = env::args().skip(1).collect::<Vec<_>>();
+    let codeblock_sources = sources;
+    let termblock_sources = vec![String::from("")];
+
+    highlight_codeblocks(codeblock_sources)?;
+    restyle_termblocks(termblock_sources)?;
     Ok(())
 }

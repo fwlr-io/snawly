@@ -34,25 +34,34 @@ pub fn {component_name}() -> impl IntoView {{
     ))
 }
 
-fn highlight_codeblocks(from_files: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
-    let dir = Path::new("/Users/scottfowler/dev/website/src/codeblocks");
+fn copy_blocks(from_files: Vec<String>, to_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     for from_file in from_files {
-        let to_file = dir.join(Path::new(&from_file).file_name().unwrap());
+        let to_file = to_dir.join(Path::new(&from_file).file_name().unwrap());
         fs::copy(&from_file, &to_file)?;
     }
 
-    let path = &dir.to_path_buf().parent().unwrap().join("codeblock.rs");
-    fs::remove_file(&path)?;
-    let mut modfile = fs::OpenOptions::new()
+    Ok(())
+}
+
+fn make_modfile(modfile_path: &Path) -> Result<fs::File, Box<dyn std::error::Error>> {
+    fs::remove_file(&modfile_path)?;
+
+    let modfile = fs::OpenOptions::new()
         .append(true)
         .create_new(true)
-        .open(&path)?;
-    modfile.write_all("use crate::ux::CodeBox;\nuse leptos::prelude::*;\n".as_bytes())?;
+        .open(&modfile_path)?;
 
+    Ok(modfile)
+}
+
+fn highlight_codeblocks(
+    codeblocks: &Path,
+    modfile: &mut fs::File,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut highlighter = Highlighter::new();
     let mut renderer = HtmlRenderer::new();
 
-    for entry in fs::read_dir(dir)? {
+    for entry in fs::read_dir(codeblocks)? {
         let file = entry?.path();
         let file_ext = file.extension().unwrap().to_str().unwrap();
         let hlt = match file_ext {
@@ -76,8 +85,10 @@ fn highlight_codeblocks(from_files: Vec<String>) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
-fn restyle_termblocks(_from_files: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
-    // translate index.ts
+fn restyle_termblocks(
+    termblocks: &Path,
+    modfile: &mut fs::File,
+) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
@@ -86,7 +97,17 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let codeblock_sources = sources;
     let termblock_sources = vec![String::from("")];
 
-    highlight_codeblocks(codeblock_sources)?;
-    restyle_termblocks(termblock_sources)?;
+    let src_dir: &Path = Path::new("/Users/scottfowler/dev/website/src/");
+
+    copy_blocks(codeblock_sources, &src_dir.join("/codeblocks/"))?;
+    let mut codeblock_modfile = make_modfile(&src_dir.join("codeblock.rs"))?;
+    codeblock_modfile.write_all("use crate::ux::CodeBox;\nuse leptos::prelude::*;\n".as_bytes())?;
+    highlight_codeblocks(&src_dir.join("/codeblocks/"), &mut codeblock_modfile)?;
+
+    copy_blocks(termblock_sources, &src_dir.join("/termblocks/"))?;
+    let mut termblock_modfile = make_modfile(&src_dir.join("termblock.rs"))?;
+    termblock_modfile.write_all("use crate::ux::TermBox;\nuse leptos::prelude::*;\n".as_bytes())?;
+    restyle_termblocks(&src_dir.join("/termblocks/"), &mut termblock_modfile)?;
+
     Ok(())
 }

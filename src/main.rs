@@ -8,9 +8,29 @@ use highlight::{apply_highlight, config_for};
 pub mod termstyle;
 use termstyle::restyle;
 
+fn copy_blocks(from_files: Vec<String>, to_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    for from_file in from_files {
+        let to_file = to_dir.join(Path::new(&from_file).file_name().unwrap());
+        fs::copy(&from_file, &to_file)?;
+    }
+
+    Ok(())
+}
+
+fn make_modfile(modfile_path: &Path) -> Result<fs::File, Box<dyn std::error::Error>> {
+    fs::remove_file(&modfile_path)?;
+
+    let modfile = fs::OpenOptions::new()
+        .append(true)
+        .create_new(true)
+        .open(&modfile_path)?;
+
+    Ok(modfile)
+}
+
 const HIGHLIGHTED_EXT: &str = "hlt";
 
-fn modfile_component(file: &Path, hlt: &Path) -> Option<String> {
+fn code_component(file: &Path, hlt: &Path) -> Option<String> {
     let component_name = file.file_stem()?.to_str()?.to_case(Case::Pascal);
 
     let dir_path = Path::new("codeblocks/");
@@ -34,24 +54,25 @@ pub fn {component_name}() -> impl IntoView {{
     ))
 }
 
-fn copy_blocks(from_files: Vec<String>, to_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    for from_file in from_files {
-        let to_file = to_dir.join(Path::new(&from_file).file_name().unwrap());
-        fs::copy(&from_file, &to_file)?;
-    }
+fn term_component(hlt_file: &Path) -> Option<String> {
+    let component_name = hlt_file.file_stem()?.to_str()?.to_case(Case::Pascal);
+    let dir_path = Path::new("termblocks/");
+    let hlt_path = dir_path.join(hlt_file.file_name()?);
+    let hlt_path = hlt_path.to_str()?;
 
-    Ok(())
-}
-
-fn make_modfile(modfile_path: &Path) -> Result<fs::File, Box<dyn std::error::Error>> {
-    fs::remove_file(&modfile_path)?;
-
-    let modfile = fs::OpenOptions::new()
-        .append(true)
-        .create_new(true)
-        .open(&modfile_path)?;
-
-    Ok(modfile)
+    Some(format!(
+        "
+#[component]
+pub fn {component_name}(#[prop(optional)] tiny: bool) -> impl IntoView {{
+    view! {{
+        <TermBox
+            tiny=tiny
+            hlt=include_str!(\"{hlt_path}\")
+        />
+    }}
+}}
+"
+    ))
 }
 
 fn highlight_codeblocks(
@@ -78,7 +99,7 @@ fn highlight_codeblocks(
         let html = String::from_utf8(std::mem::take(&mut renderer.html))?;
         renderer.reset();
 
-        let component = modfile_component(&file, &hlt).unwrap();
+        let component = code_component(&file, &hlt).unwrap();
         fs::write(&hlt, html)?;
         modfile.write_all(component.as_bytes())?;
     }
@@ -89,6 +110,17 @@ fn restyle_termblocks(
     termblocks: &Path,
     modfile: &mut fs::File,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    for entry in fs::read_dir(termblocks)? {
+        let file = entry?.path();
+        let hlt_file = file.with_extension("hlt");
+
+        let source = fs::read_to_string(&file)?;
+        let hlt = restyle(source);
+        let component = term_component(&hlt_file).unwrap();
+        fs::write(&hlt_file, hlt)?;
+        modfile.write_all(component.as_bytes())?;
+    }
+
     Ok(())
 }
 

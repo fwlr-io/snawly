@@ -19,7 +19,7 @@ fn style_to_class(atr: &str, val: &str) -> String {
     }
 }
 
-pub fn restyle(term: &str) -> String {
+pub fn restyle(term: String) -> String {
     let all_but_last_div_close = Regex::new(r#"<\/div>(?!$)"#).unwrap();
     let zed_links = Regex::new(r#"href="zed:\/\/file\/\/Users\/scottfowler([^"]*)"#).unwrap();
     let style_remapper = Regex::new(r#"style="([^"]*)""#).unwrap();

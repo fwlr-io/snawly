@@ -1,5 +1,9 @@
-use convert_case::{Case, Casing};
-use std::{env, fs, io::Write, path::Path};
+use std::{
+    env,
+    fs::{self},
+    io::Write,
+    path::{Path, PathBuf},
+};
 use tree_sitter_highlight::{Highlighter, HtmlRenderer};
 
 pub mod highlight;
@@ -8,119 +12,65 @@ use highlight::{apply_highlight, config_for};
 pub mod termstyle;
 use termstyle::restyle;
 
+pub mod hlt;
+use hlt::Hlt;
+
 fn copy_blocks(from_files: Vec<String>, to_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     for from_file in from_files {
-        let to_file = to_dir.join(Path::new(&from_file).file_name().unwrap());
-        fs::copy(&from_file, &to_file)?;
+        let file_name = Path::new(&from_file).file_name().unwrap();
+        fs::copy(&from_file, &to_dir.join(file_name))?;
     }
 
     Ok(())
 }
 
-fn make_modfile(modfile_path: &Path) -> Result<fs::File, Box<dyn std::error::Error>> {
-    fs::remove_file(&modfile_path)?;
-
-    let modfile = fs::OpenOptions::new()
+fn make_modfile(path: PathBuf, preamble: &str) -> Result<fs::File, Box<dyn std::error::Error>> {
+    fs::remove_file(&path)?;
+    let mut modfile = fs::OpenOptions::new()
         .append(true)
         .create_new(true)
-        .open(&modfile_path)?;
+        .open(&path)?;
+    modfile.write_all(preamble.as_bytes())?;
 
     Ok(modfile)
 }
 
-const HIGHLIGHTED_EXT: &str = "hlt";
-
-fn code_component(file: &Path, hlt: &Path) -> Option<String> {
-    let component_name = file.file_stem()?.to_str()?.to_case(Case::Pascal);
-
-    let dir_path = Path::new("codeblocks/");
-    let file_path = dir_path.join(file.file_name()?);
-    let file_path = file_path.to_str()?;
-    let hlt_path = dir_path.join(hlt.file_name()?);
-    let hlt_path = hlt_path.to_str()?;
-
-    Some(format!(
-        "
-#[component]
-pub fn {component_name}() -> impl IntoView {{
-    view! {{
-        <CodeBox
-            raw=include_str!(\"{file_path}\")
-            code=include_str!(\"{hlt_path}\")
-        />
-    }}
-}}
-"
-    ))
-}
-
-fn term_component(hlt_file: &Path) -> Option<String> {
-    let component_name = hlt_file.file_stem()?.to_str()?.to_case(Case::Pascal);
-    let dir_path = Path::new("termblocks/");
-    let hlt_path = dir_path.join(hlt_file.file_name()?);
-    let hlt_path = hlt_path.to_str()?;
-
-    Some(format!(
-        "
-#[component]
-pub fn {component_name}(#[prop(optional)] tiny: bool) -> impl IntoView {{
-    view! {{
-        <TermBox
-            tiny=tiny
-            hlt=include_str!(\"{hlt_path}\")
-        />
-    }}
-}}
-"
-    ))
-}
-
-fn highlight_codeblocks(
-    codeblocks: &Path,
-    modfile: &mut fs::File,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn highlight_codeblocks(src_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut highlighter = Highlighter::new();
     let mut renderer = HtmlRenderer::new();
 
-    for entry in fs::read_dir(codeblocks)? {
-        let file = entry?.path();
-        let file_ext = file.extension().unwrap().to_str().unwrap();
-        let hlt = match file_ext {
-            HIGHLIGHTED_EXT => continue,
-            _ => file.with_extension(HIGHLIGHTED_EXT),
-        };
+    let mut codeblock_modfile = make_modfile(
+        src_dir.join("codeblock.rs"),
+        "use crate::ux::CodeBox;\nuse leptos::prelude::*;\n",
+    )?;
 
-        let config = config_for(file_ext).unwrap();
-        let source = fs::read_to_string(&file)?.into_bytes();
-
+    for entry in fs::read_dir(&src_dir.join("codeblocks"))?.filter_map(|p| Hlt::maybe_from(p.ok()?))
+    {
+        let config = config_for(&entry.file_ext).unwrap();
+        let source = fs::read_to_string(&entry.file)?.into_bytes();
         let highlights = highlighter.highlight(config, &source, None, |lang| config_for(lang))?;
 
         renderer.render(highlights, &source, &apply_highlight)?;
-        let html = String::from_utf8(std::mem::take(&mut renderer.html))?;
+        fs::write(&entry.hlt_file, &mut renderer.html)?;
         renderer.reset();
 
-        let component = code_component(&file, &hlt).unwrap();
-        fs::write(&hlt, html)?;
-        modfile.write_all(component.as_bytes())?;
+        codeblock_modfile.write_all(entry.as_code_component().as_bytes())?;
     }
     Ok(())
 }
 
-fn restyle_termblocks(
-    termblocks: &Path,
-    modfile: &mut fs::File,
-) -> Result<(), Box<dyn std::error::Error>> {
-    for entry in fs::read_dir(termblocks)? {
-        let file = entry?.path();
-        let hlt_file = file.with_extension("hlt");
+fn restyle_termblocks(src_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let mut termblock_modfile = make_modfile(
+        src_dir.join("termblock.rs"),
+        "use crate::ux::TermBox;\nuse leptos::prelude::*;\n",
+    )?;
 
-        let source = fs::read_to_string(&file)?;
-        let hlt = restyle(source);
-        let component = term_component(&hlt_file).unwrap();
-        fs::write(&hlt_file, hlt)?;
-        modfile.write_all(component.as_bytes())?;
+    for entry in fs::read_dir(&src_dir.join("termblocks"))?.filter_map(|p| Hlt::maybe_from(p.ok()?))
+    {
+        let source = fs::read_to_string(&entry.file)?;
+        fs::write(&entry.hlt_file, restyle(source))?;
+        termblock_modfile.write_all(entry.as_term_component().as_bytes())?;
     }
-
     Ok(())
 }
 
@@ -131,15 +81,11 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let src_dir: &Path = Path::new("/Users/scottfowler/dev/website/src/");
 
-    copy_blocks(codeblock_sources, &src_dir.join("/codeblocks/"))?;
-    let mut codeblock_modfile = make_modfile(&src_dir.join("codeblock.rs"))?;
-    codeblock_modfile.write_all("use crate::ux::CodeBox;\nuse leptos::prelude::*;\n".as_bytes())?;
-    highlight_codeblocks(&src_dir.join("/codeblocks/"), &mut codeblock_modfile)?;
+    copy_blocks(codeblock_sources, &src_dir.join("codeblocks"))?;
+    highlight_codeblocks(src_dir)?;
 
-    copy_blocks(termblock_sources, &src_dir.join("/termblocks/"))?;
-    let mut termblock_modfile = make_modfile(&src_dir.join("termblock.rs"))?;
-    termblock_modfile.write_all("use crate::ux::TermBox;\nuse leptos::prelude::*;\n".as_bytes())?;
-    restyle_termblocks(&src_dir.join("/termblocks/"), &mut termblock_modfile)?;
+    copy_blocks(termblock_sources, &src_dir.join("termblocks"))?;
+    restyle_termblocks(src_dir)?;
 
     Ok(())
 }

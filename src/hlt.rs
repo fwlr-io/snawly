@@ -50,16 +50,16 @@ impl Hlt {
     pub fn as_code_component(&self) -> String {
         format!(
             "
-    #[component]
-    pub fn {component_name}() -> impl IntoView {{
-        view! {{
-            <CodeBox
-                raw=include_str!(\"{file_relative}\")
-                code=include_str!(\"{hlt_relative}\")
-            />
-        }}
+#[component]
+pub fn {component_name}() -> impl IntoView {{
+    view! {{
+        <CodeBox
+            raw=include_str!(\"{file_relative}\")
+            code=include_str!(\"{hlt_relative}\")
+        />
     }}
-    ",
+}}
+",
             component_name = self.component_name,
             file_relative = self.file_relative,
             hlt_relative = self.hlt_relative
@@ -69,18 +69,18 @@ impl Hlt {
     pub fn as_term_component(&self) -> String {
         format!(
             "
-    #[component]
-    pub fn {component_name}(#[prop(optional)] tiny: bool) -> impl IntoView {{
-        view! {{
-            <TermBox
-                tiny=tiny
-                hlt=include_str!(\"{hlt_path}\")
-            />
-        }}
+#[component]
+pub fn {component_name}(#[prop(optional)] tiny: bool) -> impl IntoView {{
+    view! {{
+        <TermBox
+            tiny=tiny
+            hlt=include_str!(\"{hlt_relative}\")
+        />
     }}
-    ",
+}}
+",
             component_name = self.component_name,
-            hlt_path = self.hlt_file
+            hlt_relative = self.hlt_relative
         )
     }
 }

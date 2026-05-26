@@ -1,5 +1,5 @@
+use clap::Parser;
 use std::{
-    env,
     fs::{self},
     io::Write,
     path::{Path, PathBuf},
@@ -14,15 +14,6 @@ use termstyle::restyle;
 
 pub mod hlt;
 use hlt::Hlt;
-
-fn copy_blocks(from_files: Vec<String>, to_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    for from_file in from_files {
-        let file_name = Path::new(&from_file).file_name().unwrap();
-        fs::copy(&from_file, &to_dir.join(file_name))?;
-    }
-
-    Ok(())
-}
 
 fn make_modfile(path: PathBuf, preamble: &str) -> Result<fs::File, Box<dyn std::error::Error>> {
     fs::remove_file(&path)?;
@@ -74,17 +65,30 @@ fn restyle_termblocks(src_dir: &Path) -> Result<(), Box<dyn std::error::Error>> 
     Ok(())
 }
 
-pub fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let sources = env::args().skip(1).collect::<Vec<_>>();
-    let codeblock_sources = sources;
-    let termblock_sources = vec![String::from("")];
+#[derive(Parser)]
+struct Cli {
+    #[arg(short, long, value_name = "FILES", num_args(1..))]
+    code: Vec<String>,
+    #[arg(short, long, value_name = "FILES", num_args(1..))]
+    term: Vec<String>,
+}
 
+pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse();
     let src_dir: &Path = Path::new("/Users/scottfowler/dev/website/src/");
 
-    copy_blocks(codeblock_sources, &src_dir.join("codeblocks"))?;
+    for from_file in cli.code {
+        let file_name = Path::new(&from_file).file_name().unwrap();
+        fs::copy(&from_file, &src_dir.join("codeblocks").join(file_name))?;
+    }
+
+    for from_file in cli.term {
+        let file_name = Path::new(&from_file).file_name().unwrap();
+        fs::copy(&from_file, &src_dir.join("termblocks").join(file_name))?;
+    }
+
     highlight_codeblocks(src_dir)?;
 
-    copy_blocks(termblock_sources, &src_dir.join("termblocks"))?;
     restyle_termblocks(src_dir)?;
 
     Ok(())

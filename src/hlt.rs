@@ -41,7 +41,7 @@ impl Hlt {
 
     pub fn maybe_from(p: DirEntry) -> Option<Self> {
         let file = p.path();
-        match file.extension().unwrap().to_str().unwrap() {
+        match file.extension()?.to_str()? {
             HIGHLIGHTED_EXT => None,
             _ => Some(Hlt::new(file.as_path())),
         }

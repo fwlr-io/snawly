@@ -7,6 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use tokio;
+use tokio::io::AsyncWriteExt;
 // use tokio_stream::{self as stream, StreamExt};
 use tree_sitter_highlight::{Highlighter, HtmlRenderer};
 
@@ -41,16 +42,88 @@ struct Cli {
     term: Vec<PathBuf>,
 }
 
+// The synchronous ordering of the original main function
+// 'accidentally' enforces some ordering constraints.
+// e.g. we can simply process the entire `codeblocks` directory,
+// but only because we previously copied all new codeblocks in.
 pub fn main() {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .unwrap()
         .block_on(async {
-            // The synchronous ordering of the original main function
-            // 'accidentally' enforces some ordering constraints.
-            // e.g. we can simply process the entire `codeblocks` directory,
-            // but only because we previously copied all new codeblocks in.
+            let src_dir: &Path = Path::new("/Users/scottfowler/dev/website/src/");
+
+            let codeblock_modfile_path = src_dir.join("codeblock.rs");
+            let codeblock_preamble =
+                "use crate::ux::CodeBox;\nuse leptos::prelude::*;\n".as_bytes();
+
+            let termblock_modfile_path = src_dir.join("termblock.rs");
+            let termblock_preamble =
+                "use crate::ux::TermBox;\nuse leptos::prelude::*;\n".as_bytes();
+
+            // The simple and ugly way of translating to async:
+
+            let make_codeblock_modfile = async || -> Result<tokio::fs::File, Box<dyn Error>> {
+                // fs::remove_file(&codeblock_modfile_path)?;
+                // let mut codeblock_modfile = fs::OpenOptions::new()
+                //     .append(true)
+                //     .create_new(true)
+                //     .open(&codeblock_modfile_path)?;
+                // codeblock_modfile.write_all(codeblock_preamble)?;
+
+                tokio::fs::remove_file(&codeblock_modfile_path).await?;
+                let mut codeblock_modfile = tokio::fs::OpenOptions::new()
+                    .append(true)
+                    .create_new(true)
+                    .open(&codeblock_modfile_path)
+                    .await?;
+                let _ = codeblock_modfile.write_all(codeblock_preamble).await;
+
+                // As long as these lines remain in the same order, things work as expected.
+
+                Ok(codeblock_modfile)
+            };
+
+            let mut codeblock_modfile = make_codeblock_modfile().await.unwrap();
+
+            // A more nuanced and cleaner way of translating to async:
+
+            // fs::remove_file(&termblock_modfile_path)?;
+            let previous_file_removal = tokio::fs::remove_file(&termblock_modfile_path);
+
+            // prereq: previous file removed
+            // let mut codeblock_modfile = fs::OpenOptions::new()
+            //     .append(true)
+            //     .create_new(true)
+            //     .open(&termblock_modfile_path)?;
+            let new_file_creation = async {
+                previous_file_removal.await?;
+                tokio::fs::OpenOptions::new()
+                    .append(true)
+                    .create_new(true)
+                    .open(&termblock_modfile_path)
+                    .await
+            };
+
+            // prereq: new file created
+            // termblock_modfile.write_all(termblock_preamble)?;
+            let new_file_ready = async {
+                let mut modfile = new_file_creation.await.unwrap();
+                modfile.write_all(termblock_preamble).await.unwrap();
+                modfile
+            };
+
+            let mut termblock_modfile = new_file_ready.await;
+
+            // It is good hygiene to explicitly encode a task's prerequisites
+            // inside the task itself, so it remains robust to lines of code moving around.
+            //
+            // It is also good practice for performance to have as many `.await` points
+            // as you reasonably can, especially arranged in this hierarchical fashion
+            // (i.e. you can await `new_file_creation` or `new_file_ready`, each of which
+            // itself has two `await` points inside).
+
             let _ = inner_main();
         })
 }
@@ -84,12 +157,17 @@ pub fn inner_main() -> Result<(), Box<dyn Error>> {
 
     // No prerequisite steps
     fs::remove_file(&codeblock_modfile_path)?;
+    // let previous_file_removal = tokio::fs::remove_file(path);
 
     // prereq: previous file removed
     let mut codeblock_modfile = fs::OpenOptions::new()
         .append(true)
         .create_new(true)
         .open(&codeblock_modfile_path)?;
+    // let new_file_creation = tokio::fs::OpenOptions::new()
+    //     .append(true)
+    //     .create_new(true)
+    //     .open(&codeblock_modfile_path);
 
     // prereq: new file created
     codeblock_modfile.write_all("use crate::ux::CodeBox;\nuse leptos::prelude::*;\n".as_bytes())?;

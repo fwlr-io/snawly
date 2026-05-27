@@ -1,4 +1,5 @@
 use clap::Parser;
+use convert_case::{Case, Casing};
 use std::{
     error::Error,
     fs,
@@ -18,6 +19,8 @@ use hlt::Hlt;
 
 #[derive(Parser)]
 struct Cli {
+    #[arg(short, long, value_name = "STRING")]
+    prefix: String,
     #[arg(short, long, value_name = "FILES", num_args(1..))]
     code: Vec<PathBuf>,
     #[arg(short, long, value_name = "FILES", num_args(1..))]
@@ -27,6 +30,7 @@ struct Cli {
 pub fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
     let src_dir: &Path = Path::new("/Users/scottfowler/dev/website/src/");
+    let prefix = cli.prefix.to_case(Case::Snake);
 
     // Codeblocks
 
@@ -34,8 +38,13 @@ pub fn main() -> Result<(), Box<dyn Error>> {
     let codeblock_modfile_path = src_dir.join("codeblock.rs");
 
     for from_file in cli.code {
-        let file_name = from_file.file_name().unwrap();
-        fs::copy(&from_file, &codeblocks_dir.join(file_name))?;
+        fs::copy(
+            &from_file,
+            &codeblocks_dir.join(format!(
+                "{prefix}_{file_name}",
+                file_name = from_file.file_name().unwrap().to_str().unwrap()
+            )),
+        )?;
     }
 
     fs::remove_file(&codeblock_modfile_path)?;
@@ -67,8 +76,13 @@ pub fn main() -> Result<(), Box<dyn Error>> {
     let termblock_modfile_path = src_dir.join("termblock.rs");
 
     for from_file in cli.term {
-        let file_name = from_file.file_name().unwrap();
-        fs::copy(&from_file, &termblocks_dir.join(file_name))?;
+        fs::copy(
+            &from_file,
+            &termblocks_dir.join(format!(
+                "{prefix}_{file_name}",
+                file_name = from_file.file_name().unwrap().to_str().unwrap()
+            )),
+        )?;
     }
 
     fs::remove_file(&termblock_modfile_path)?;

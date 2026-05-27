@@ -26,8 +26,8 @@ pub fn config_for(name: &str) -> Option<&'static HighlightConfiguration> {
         "ts" | "typescript" => &TYPESCRIPT,
         "tsx" => &TSX,
         "yml" | "yaml" => &YAML,
-        "rs" | "rust" => &RUST_WITH_RSTML, // todo: if contains `view!` macro; else just `rust`
         "sh" | "shell" => &SHELL,
+        "rs" | "rust" => &RUST_WITH_RSTML, // todo: if contains `view!` macro; else just `rust`
         x => {
             eprintln!("not a recognised extension: {x}");
             return None;

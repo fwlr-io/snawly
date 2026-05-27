@@ -22,7 +22,7 @@ fn style_to_class(atr: &str, val: &str) -> String {
 pub fn restyle(term: String) -> String {
     let all_but_last_div_close = Regex::new(r#"<\/div>(?!$)"#).unwrap();
     let zed_links = Regex::new(r#"href="zed:\/\/file\/\/Users\/scottfowler([^"]*)""#).unwrap();
-    let style_remapper = Regex::new(r#" style="([^"]*)""#).unwrap();
+    let style_remapper = Regex::new(r#"style="([^"]*)""#).unwrap();
 
     let term = term.replace("<div style=\"display: inline;", "<span style=\"");
     let term = all_but_last_div_close.replace_all(&term, "</span>");
@@ -31,8 +31,8 @@ pub fn restyle(term: String) -> String {
 
     style_remapper
         .replace_all(&term, |caps: &Captures| {
-            let res = format!(
-                " class=\"{}\"",
+            format!(
+                "class=\"{}\"",
                 caps[1]
                     .split(";")
                     .filter(|s| s.len() > 0)
@@ -41,11 +41,8 @@ pub fn restyle(term: String) -> String {
                     .filter(|s| s.len() > 0)
                     .collect::<Vec<String>>()
                     .join(" ")
-            );
-            if res == " class=\" \"" {
-                return "".to_string();
-            }
-            res
+            )
         })
+        .replace(" class=\" \"", "")
         .to_string()
 }

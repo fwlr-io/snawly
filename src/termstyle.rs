@@ -1,12 +1,11 @@
 use fancy_regex::{Captures, Regex};
 
+// functional
 fn style_to_class(atr: &str, val: &str) -> String {
     if atr.ends_with("color") {
-        format!(
-            "{pfx}-[{sfx}]",
-            pfx = if atr == "color" { "text" } else { "bg" },
-            sfx = val.replace(" ", "")
-        )
+        let pfx = if atr == "color" { "text" } else { "bg" };
+        let sfx = val.replace(" ", "");
+        format!("{pfx}-[{sfx}]")
     } else if atr.starts_with("font-") {
         format!("font-{val}")
     } else {
@@ -20,15 +19,21 @@ fn style_to_class(atr: &str, val: &str) -> String {
 }
 
 pub fn restyle(term: String) -> String {
-    let all_but_last_div_close = Regex::new(r#"<\/div>(?!$)"#).unwrap();
-    let zed_links = Regex::new(r#"href="zed:\/\/file\/\/Users\/scottfowler([^"]*)""#).unwrap();
-    let style_remapper = Regex::new(r#"style="([^"]*)""#).unwrap();
-
+    // <div style="display: inline; font-weight: bold">
+    //                <span style=" font-weight: bold">
     let term = term.replace("<div style=\"display: inline;", "<span style=\"");
+
+    let all_but_last_div_close = Regex::new(r#"<\/div>(?!$)"#).unwrap();
     let term = all_but_last_div_close.replace_all(&term, "</span>");
+
+    let zed_links = Regex::new(r#"href="zed:\/\/file\/\/Users\/scottfowler([^"]*)""#).unwrap();
     let term = zed_links.replace_all(&term, "onclick='alert(\"opens `~$1` in your editor\");'");
+
     let term = term.replace("style=\"font-family: monospace; white-space: pre;background-color: #1c1b19;color: #fce8c3;\"", "class=\"whitespace-pre\"");
 
+    let style_remapper = Regex::new(r#"style="([^"]*)""#).unwrap();
+    // style="display: inline; font-weight: bold; text-color: rgb(10, 20, 30)"
+    // class="inline font-bold text-[rgb(10,20,30)]"
     style_remapper
         .replace_all(&term, |caps: &Captures| {
             format!(

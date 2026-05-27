@@ -2,6 +2,7 @@ use constcat::concat;
 use std::{collections::HashMap, sync::LazyLock};
 use tree_sitter_highlight::{Highlight, HighlightConfiguration};
 
+// stateful
 pub fn apply_highlight(hl: Highlight, acc: &mut Vec<u8>) {
     let tag = *NAMES.get(hl.0).unwrap();
     let color = *COLORS.get(tag).unwrap_or_else(|| {
@@ -12,6 +13,7 @@ pub fn apply_highlight(hl: Highlight, acc: &mut Vec<u8>) {
     acc.extend(format!("class=\"text-{color}\"").into_bytes());
 }
 
+// functional
 pub fn config_for(name: &str) -> Option<&'static HighlightConfiguration> {
     Some(match name {
         "css" => &CSS,
@@ -97,6 +99,7 @@ const NAMES: &[&str] = &[
     "variable.parameter",
 ];
 
+// Note: dereferencing may block thread if initialisation is running?
 const COLORS: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     HashMap::from([
         ("module", "dim-magenta"),

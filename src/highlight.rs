@@ -125,6 +125,7 @@ const COLORS: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("number", "blue"),
         ("boolean", "blue"),
         ("variable", "blue"),
+        ("variable.builtin", "blue"),
         ("variable.parameter", "blue"),
         ("type", "dim-blue"),
         ("type.builtin", "dim-blue"),

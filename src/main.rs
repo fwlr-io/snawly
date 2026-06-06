@@ -1,26 +1,30 @@
+#[macro_use]
+extern crate macro_rules_attribute;
+
+use futures_concurrency::prelude::*;
+use smol::prelude::*;
+use smol::{
+    fs, io,
+    stream::{self, StreamExt},
+};
+use smol_macros::{Executor, main};
+use std::os::fd::{AsRawFd, FromRawFd};
 use std::{
-    error::Error,
     io::Write,
     path::{Path, PathBuf},
+    sync::LazyLock,
 };
-// use tokio::fs;
-use tokio::io::AsyncWriteExt;
-// use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
-// use tokio_stream::{self as stream, StreamExt};
-// use futures_concurrency::prelude::*;
+
+pub mod highlight;
+use highlight::{apply_highlight, config_for};
+pub mod termstyle;
+use termstyle::restyle;
+pub mod hlt;
+use hlt::Hlt;
 
 use clap::Parser;
 use convert_case::{Case, Casing};
 use tree_sitter_highlight::{Highlighter, HtmlRenderer};
-
-pub mod highlight;
-use highlight::{apply_highlight, config_for};
-
-pub mod termstyle;
-use termstyle::restyle;
-
-pub mod hlt;
-use hlt::Hlt;
 
 #[derive(Parser)]
 /// A tool for putting source code and terminal captures on the fwlr.io website.
@@ -44,98 +48,100 @@ struct Cli {
     term: Vec<PathBuf>,
 }
 
-// The synchronous ordering of the original main function
-// 'accidentally' enforces some ordering constraints.
-// e.g. we can simply process the entire `codeblocks` directory,
-// but only because we previously copied all new codeblocks in.
-pub fn main() -> Result<(), Box<dyn Error>> {
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(async {
-            // let cli = Cli::parse();
-            let src_dir: &Path = Path::new("/Users/scottfowler/dev/website/src/");
-            // let codeblocks_dir = src_dir.join("codeblocks");
-            let codeblock_modfile = async {
-                let path = src_dir.join("codeblock.rs");
+#[apply(main!)]
+async fn main(_ex: &Executor) -> io::Result<()> {
+    let cli = Cli::parse();
+    let prefix = LazyLock::new(|| {
+        cli.prefix
+            .expect("`--prefix` is required")
+            .to_case(Case::Snake)
+    });
+    let src_dir: &Path = Path::new("/Users/scottfowler/dev/website/src/");
 
-                tokio::fs::remove_file(&path).await?;
-                let mut modfile = tokio::fs::OpenOptions::new()
-                    .append(true)
-                    .create_new(true)
-                    .open(&path)
-                    .await?;
-                modfile
-                    .write_all("use crate::ux::CodeBox;\nuse leptos::prelude::*;\n".as_bytes())
-                    .await?;
+    let modfile = async |path: &str, preamble: &str| {
+        let mut file = fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .truncate(true)
+            .open(src_dir.join(path))
+            .await?;
+        file.write_all(b"use leptos::prelude::*;\n").await?;
+        file.write_all(preamble.as_bytes()).await.map(|_| file)
+    };
+    let (mut codeblock_modfile, mut termblock_modfile) = (
+        modfile("codeblock.rs", "use crate::ux::CodeBox;\n"),
+        modfile("termblock.rs", "use crate::ux::TermBox;\n"),
+    )
+        .try_join()
+        .await?;
 
-                Ok::<tokio::fs::File, Box<dyn Error>>(modfile)
-            };
+    let to_from = |from: &PathBuf| {
+        format!(
+            "{prefix}_{file_name}",
+            prefix = &*prefix,
+            file_name = from.file_name().unwrap().to_string_lossy()
+        )
+    };
 
-            // let termblocks_dir = src_dir.join("termblocks");
-            let termblock_modfile = async {
-                let path = src_dir.join("termblock.rs");
+    let codeblocks = stream::iter(cli.code)
+        .then(async |from| {
+            let to = src_dir.join("codeblocks").join(to_from(&from));
+            fs::copy(from, &to).await.map(|_| to)
+        })
+        .merge(
+            fs::read_dir(src_dir.join("codeblocks"))
+                .await?
+                .map(|d| d.map(|f| f.path())),
+        );
 
-                tokio::fs::remove_file(&path).await?;
-                let mut modfile = tokio::fs::OpenOptions::new()
-                    .append(true)
-                    .create_new(true)
-                    .open(&path)
-                    .await?;
-                modfile
-                    .write_all("use crate::ux::TermBox;\nuse leptos::prelude::*;\n".as_bytes())
-                    .await?;
-                Ok::<tokio::fs::File, Box<dyn Error>>(modfile)
-            };
+    let termblocks = stream::iter(cli.term)
+        .then(async |from: PathBuf| {
+            let to = src_dir.join("termblocks").join(to_from(&from));
+            fs::copy(from, &to).await.map(|_| to)
+        })
+        .merge(
+            fs::read_dir(src_dir.join("codeblocks"))
+                .await?
+                .map(|d| d.map(|f| f.path())),
+        );
 
-            let _ = inner_main(
-                &mut codeblock_modfile.await.unwrap().into_std().await,
-                &mut termblock_modfile.await.unwrap().into_std().await,
-            );
-        });
+    codeblock_modfile.sync_all().await?;
+    let mut codeblock_modfile =
+        unsafe { std::fs::File::from_raw_fd(codeblock_modfile.as_raw_fd()) };
+    termblock_modfile.sync_all().await?;
+    let mut termblock_modfile =
+        unsafe { std::fs::File::from_raw_fd(termblock_modfile.as_raw_fd()) };
+
+    inner_main(
+        &mut codeblock_modfile,
+        &mut termblock_modfile,
+        codeblocks
+            .filter_map(|f| f.ok().and_then(Hlt::try_from))
+            .collect::<Vec<_>>()
+            .await,
+        termblocks
+            .filter_map(|f| f.ok().and_then(Hlt::try_from))
+            .collect::<Vec<_>>()
+            .await,
+    )
+    .unwrap();
     Ok(())
 }
 
 pub fn inner_main(
     codeblock_modfile: &mut std::fs::File,
     termblock_modfile: &mut std::fs::File,
-) -> Result<(), Box<dyn Error>> {
-    let cli = Cli::parse();
-
-    let src_dir: &Path = Path::new("/Users/scottfowler/dev/website/src/");
-
+    codeblocks: Vec<Hlt>,
+    termblocks: Vec<Hlt>,
+) -> Result<(), Box<dyn std::error::Error>> {
     // Codeblocks
-
-    let codeblocks_dir = src_dir.join("codeblocks");
-
-    // Parallelizable. On completing a file copy,
-    // should trigger a highlight/format for the new file.
-    for from_file in cli.code {
-        std::fs::copy(
-            &from_file,
-            &codeblocks_dir.join(format!(
-                "{prefix}_{file_name}",
-                prefix = cli
-                    .prefix
-                    .clone()
-                    .expect("--prefix is required")
-                    .to_case(Case::Snake),
-                file_name = from_file.file_name().unwrap().to_str().unwrap()
-            )),
-        )?;
-    }
 
     // Here be state
     let mut highlighter = Highlighter::new();
     // Here be state
     let mut renderer = HtmlRenderer::new();
 
-    // Parallelizable. New targets may be added to the directory
-    // after this has already been started.
-    for entry in
-        std::fs::read_dir(&codeblocks_dir)?.filter_map(|p| Hlt::try_from(p.ok()?.path().as_path()))
-    {
+    for entry in codeblocks.into_iter() {
         // functional
         let config = config_for(&entry.file_ext).unwrap();
         // async-able
@@ -154,30 +160,7 @@ pub fn inner_main(
 
     // Termblocks
 
-    let termblocks_dir = src_dir.join("termblocks");
-
-    // Parallelizable. On completing a file copy,
-    // should trigger a highlight/format for the new file.
-    for from_file in cli.term {
-        std::fs::copy(
-            &from_file,
-            &termblocks_dir.join(format!(
-                "{prefix}_{file_name}",
-                prefix = cli
-                    .prefix
-                    .clone()
-                    .expect("--prefix is required")
-                    .to_case(Case::Snake),
-                file_name = from_file.file_name().unwrap().to_str().unwrap()
-            )),
-        )?;
-    }
-
-    // Parallelizable. New targets may be added to the directory
-    // after this has already been started.
-    for entry in
-        std::fs::read_dir(&termblocks_dir)?.filter_map(|p| Hlt::try_from(p.ok()?.path().as_path()))
-    {
+    for entry in termblocks.into_iter() {
         // async-able
         let source = std::fs::read_to_string(&entry.file)?;
         // async-able

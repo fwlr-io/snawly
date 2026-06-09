@@ -1,53 +1,56 @@
 use fancy_regex::{Captures, Regex};
-
-// functional
-fn style_to_class(atr: &str, val: &str) -> String {
-    if atr.ends_with("color") {
-        let pfx = if atr == "color" { "text" } else { "bg" };
-        let sfx = val.replace(" ", "");
-        format!("{pfx}-[{sfx}]")
-    } else if atr.starts_with("font-") {
-        format!("font-{val}")
-    } else {
-        // intentionally ignoring underlines
-        // warn if something else is ignored
-        if !atr.starts_with("text-decoration-") {
-            eprintln!("unrecognised: atr = '{atr}', val = '{val}'")
-        }
-        "".to_string()
-    }
-}
+use std::sync::LazyLock;
 
 pub fn restyle(term: String) -> String {
-    // <div style="display: inline; font-weight: bold">
-    //                <span style=" font-weight: bold">
-    let term = term.replace("<div style=\"display: inline;", "<span style=\"");
+    let term = term.replace(PARENT_STYLE, PARENT_CLASS);
+    let term = term.replace(DIV_OPEN, SPAN_OPEN);
+    let term = DIV_CLOSE.replace_all(&term, SPAN_CLOSE);
+    let term = ZED_LINK.replace_all(&term, WINDOW_ALERT);
 
-    let all_but_last_div_close = Regex::new(r#"<\/div>(?!$)"#).unwrap();
-    let term = all_but_last_div_close.replace_all(&term, "</span>");
-
-    let zed_links = Regex::new(r#"href="zed:\/\/file\/\/Users\/scottfowler([^"]*)""#).unwrap();
-    let term = zed_links.replace_all(&term, "onclick='alert(\"opens `~$1` in your editor\");'");
-
-    let term = term.replace("style=\"font-family: monospace; white-space: pre;background-color: #1c1b19;color: #fce8c3;\"", "class=\"whitespace-pre\"");
-
-    let style_remapper = Regex::new(r#"style="([^"]*)""#).unwrap();
-    // style="display: inline; font-weight: bold; text-color: rgb(10, 20, 30)"
-    // class="inline font-bold text-[rgb(10,20,30)]"
-    style_remapper
+    STYLE_REMAPPER
         .replace_all(&term, |caps: &Captures| {
             format!(
                 "class=\"{}\"",
                 caps[1]
                     .split(";")
-                    .filter(|s| s.len() > 0)
-                    .filter_map(|p| p.split_once(":").map(|(a, b)| (a.trim(), b.trim())))
-                    .map(|(atr, val)| style_to_class(atr, val).trim().to_string())
-                    .filter(|s| s.len() > 0)
+                    .filter(|s| !s.is_empty())
+                    .filter_map(style_to_class)
                     .collect::<Vec<String>>()
                     .join(" ")
             )
         })
         .replace(" class=\" \"", "")
-        .to_string()
 }
+
+fn style_to_class(p: &str) -> Option<String> {
+    let (a, v) = p.split_once(":")?;
+    let atr = a.trim();
+    let val = v.trim().replace(" ", "");
+    match atr {
+        "color" => Some(format!("text-[{val}]")),
+        _ if atr.ends_with("color") => Some(format!("bg-[{val}]")),
+        _ if atr.starts_with("font-") => Some(format!("font-{val}")),
+        _ if atr.starts_with("text-decoration") => None,
+        _ => {
+            eprintln!("unrecognised: atr = '{atr}', val = '{val}'");
+            None
+        }
+    }
+}
+
+const DIV_OPEN: &str = "<div style=\"display: inline;";
+const SPAN_OPEN: &str = "<span style=\"";
+
+static DIV_CLOSE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"<\/div>(?!$)"#).unwrap());
+const SPAN_CLOSE: &str = "</span>";
+
+static ZED_LINK: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"href="zed:\/\/file\/\/Users\/scottfowler([^"]*)""#).unwrap());
+const WINDOW_ALERT: &str = "onclick='alert(\"opens `~$1` in your editor\");'";
+
+const PARENT_STYLE: &str =
+    "style=\"font-family: monospace; white-space: pre;background-color: #1c1b19;color: #fce8c3;\"";
+const PARENT_CLASS: &str = "class=\"whitespace-pre\"";
+
+static STYLE_REMAPPER: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"style="([^"]*)""#).unwrap());

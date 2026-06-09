@@ -1,6 +1,16 @@
 use constcat::concat;
-use std::{collections::HashMap, sync::LazyLock};
+use phf::phf_map;
+use std::{collections::HashMap, path::PathBuf, sync::LazyLock};
 use tree_sitter_highlight::{Highlight, HighlightConfiguration};
+
+pub fn get_highlight(hl: &Highlight) -> &str {
+    NAME_COLOR_MAP
+        .get(*NAMES.get(hl.0).unwrap())
+        .unwrap_or_else(|| {
+            eprintln!("unrecognised: {}", *NAMES.get(hl.0).unwrap());
+            &"yellow"
+        })
+}
 
 // stateful
 pub fn apply_highlight(hl: Highlight, acc: &mut Vec<u8>) {
@@ -9,32 +19,7 @@ pub fn apply_highlight(hl: Highlight, acc: &mut Vec<u8>) {
         eprintln!("unrecognised: {tag}");
         &"yellow"
     });
-
     acc.extend(format!("class=\"text-{color}\"").into_bytes());
-}
-
-// functional
-pub fn config_for(name: &str) -> Option<&'static HighlightConfiguration> {
-    Some(match name {
-        "css" => &CSS,
-        "csv" => &CSV,
-        "dot" | "gv" => &DOT,
-        "html" => &HTML,
-        "json" => &JSON,
-        "js" | "javascript" => &JAVASCRIPT,
-        "jsx" => &JSX,
-        "md" => &MARKDOWN_BLOCK,
-        "toml" => &TOML,
-        "ts" | "typescript" => &TYPESCRIPT,
-        "tsx" => &TSX,
-        "yml" | "yaml" => &YAML,
-        "sh" | "shell" => &SHELL,
-        "rs" | "rust" => &RUST_WITH_RSTML, // todo: if contains `view!` macro; else just `rust`
-        x => {
-            eprintln!("not a recognised extension: {x}");
-            return None;
-        }
-    })
 }
 
 const NAMES: &[&str] = &[
@@ -99,6 +84,45 @@ const NAMES: &[&str] = &[
     "variable.parameter",
 ];
 
+const NAME_COLOR_MAP: phf::Map<&str, &str> = phf_map! {
+    "module" => "dim-magenta",
+    "keyword" => "dim-magenta",
+    "constructor" => "dim-magenta",
+    "error" => "red",
+    "tag.error" => "red",
+    "function" => "dim-red",
+    "function.method" => "dim-red",
+    "function.builtin" => "dim-red",
+    "tag" => "dim-yellow",
+    "string" => "green",
+    "string.special" => "green",
+    "attribute" => "dim-green",
+    "function.macro" => "dim-green",
+    "escape" => "cyan",
+    "string.escape" => "cyan",
+    "constant" => "cyan",
+    "constant.builtin" => "cyan",
+    "embedded" => "dim-cyan",
+    "namespace" => "dim-cyan",
+    "tag.attribute" => "dim-cyan",
+    "number" => "blue",
+    "boolean" => "blue",
+    "variable" => "blue",
+    "variable.builtin" => "blue",
+    "variable.parameter" => "blue",
+    "type" => "dim-blue",
+    "type.builtin" => "dim-blue",
+    "comment" => "grey",
+    "comment.documentation" => "grey",
+    "tag.delimiter" => "grey",
+    "punctuation.delimiter" => "grey",
+    "label" => "dim-white",
+    "operator" => "dim-white",
+    "property" => "dim-white",
+    "punctuation" => "dim-white",
+    "punctuation.bracket" => "dim-white"
+};
+
 // Note: dereferencing may block thread if initialisation is running?
 const COLORS: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     HashMap::from([
@@ -140,6 +164,35 @@ const COLORS: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
         ("punctuation.bracket", "dim-white"),
     ])
 });
+
+pub fn config_for(ext_or_name: &str) -> Option<&'_ HighlightConfiguration> {
+    Some(match ext_or_name {
+        "css" => &CSS,
+        "csv" => &CSV,
+        "dot" | "gv" => &DOT,
+        "html" => &HTML,
+        "json" => &JSON,
+        "js" | "javascript" => &JAVASCRIPT,
+        "jsx" => &JSX,
+        "md" => &MARKDOWN_BLOCK,
+        "toml" => &TOML,
+        "ts" | "typescript" => &TYPESCRIPT,
+        "tsx" => &TSX,
+        "yml" | "yaml" => &YAML,
+        "sh" | "shell" => &SHELL,
+        "rs" | "rust" => &RUST_WITH_RSTML, // todo: if contains `view!` macro; else just `rust`
+        x => {
+            eprintln!("not a recognised extension: {x}");
+            return None;
+        }
+    })
+}
+
+// let ext = (|| Some(path.extension()?.to_str()?))().ok;
+
+pub fn config_for_file(path: &PathBuf) -> Option<&'_ HighlightConfiguration> {
+    config_for(path.extension()?.to_str()?)
+}
 
 static CSS: LazyLock<HighlightConfiguration> = LazyLock::new(|| {
     use tree_sitter_css::*;

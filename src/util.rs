@@ -4,6 +4,17 @@ pub mod prelude {
 }
 
 pub mod ok_result {
+    pub trait OptionExt<T> {
+        fn ok(self) -> Result<T, NoneError>;
+    }
+    impl<T> OptionExt<T> for Option<T> {
+        #[track_caller]
+        fn ok(self) -> Result<T, NoneError> {
+            self.ok_or(NoneError {
+                loc: std::panic::Location::caller(),
+            })
+        }
+    }
 
     #[derive(Debug)]
     pub struct NoneError {
@@ -19,18 +30,6 @@ pub mod ok_result {
     impl From<NoneError> for std::io::Error {
         fn from(none_error: NoneError) -> std::io::Error {
             std::io::Error::other(none_error)
-        }
-    }
-
-    pub trait OptionExt<T> {
-        fn ok(self) -> Result<T, NoneError>;
-    }
-    impl<T> OptionExt<T> for Option<T> {
-        #[track_caller]
-        fn ok(self) -> Result<T, NoneError> {
-            self.ok_or_else(|| NoneError {
-                loc: std::panic::Location::caller(),
-            })
         }
     }
 }
@@ -51,6 +50,7 @@ pub mod ok_result {
 ///       …but it actually implements FnOnce<(&'2 String,)>, for some specific lifetime '2 (rustc)
 ///
 /// This is unfortunately currently beyond my Rust knowledge, so it's tabled for now.
+#[allow(unused)]
 pub mod self_to {
     pub trait To {
         fn to<T>(&self, f: impl FnOnce(&Self) -> T) -> T;

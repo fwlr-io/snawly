@@ -1,7 +1,7 @@
 use fancy_regex::{Captures, Regex};
 use std::sync::LazyLock;
 
-pub fn restyle(term: String) -> String {
+pub fn termstyle(term: String) -> String {
     let term = term.replace(PARENT_STYLE, PARENT_CLASS);
     let term = term.replace(DIV_OPEN, SPAN_OPEN);
     let term = DIV_CLOSE.replace_all(&term, SPAN_CLOSE);
@@ -24,14 +24,12 @@ pub fn restyle(term: String) -> String {
 
 fn style_to_class(p: &str) -> Option<String> {
     let (a, v) = p.split_once(":")?;
-    let atr = a.trim();
-    let val = v.trim().replace(" ", "");
-    match atr {
-        "color" => Some(format!("text-[{val}]")),
-        _ if atr.ends_with("color") => Some(format!("bg-[{val}]")),
-        _ if atr.starts_with("font-") => Some(format!("font-{val}")),
-        _ if atr.starts_with("text-decoration") => None,
-        _ => {
+    match (a.trim(), v.trim().replace(" ", "")) {
+        ("color", val) => Some(format!("text-[{val}]")),
+        (atr, val) if atr.ends_with("color") => Some(format!("bg-[{val}]")),
+        (atr, val) if atr.starts_with("font-") => Some(format!("font-{val}")),
+        (atr, _) if atr.starts_with("text-decoration") => None,
+        (atr, val) => {
             eprintln!("unrecognised: atr = '{atr}', val = '{val}'");
             None
         }

@@ -1,5 +1,5 @@
 use convert_case::{Case, Casing};
-use std::path::Path;
+use std::path::PathBuf;
 
 const HIGHLIGHTED_EXT: &str = "hlt";
 
@@ -13,12 +13,12 @@ pub struct Hlt {
 }
 
 impl Hlt {
-    pub fn try_from(file: &Path) -> Option<Self> {
+    pub fn try_from(file: PathBuf) -> Option<Self> {
         if file.extension()?.to_str()? == HIGHLIGHTED_EXT {
             return None;
         }
         let hlt = file.with_extension(HIGHLIGHTED_EXT);
-        let sub_path = Path::new(file.parent()?.file_name()?);
+        let sub_path = PathBuf::from(file.parent()?.file_name()?);
         Some(Self {
             file: file.to_str()?.into(),
             file_ext: file.extension()?.to_str()?.into(),

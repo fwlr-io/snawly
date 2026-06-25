@@ -78,7 +78,7 @@ async fn main(ex: &Executor) -> io::Result<()> {
     let src = PathBuf::from(ROOT).join("blocks");
     let to_blocks = |name: &str| src.join(format!("{prefix}_{}", name.to_case(Case::Kebab)));
 
-    let move_new_blocks = (
+    let _move_new_blocks = (
         stream::iter(cli.term)
             .map(|(name, from)| (to_blocks(&name).with_extension(TERM_EXT), from)),
         stream::iter(cli.code)
@@ -86,9 +86,8 @@ async fn main(ex: &Executor) -> io::Result<()> {
     )
         .merge()
         .co()
-        .try_for_each(async |(to, from)| fs::copy(from, to).await.and(Ok(())));
-
-    move_new_blocks.await?;
+        .try_for_each(async |(to, from)| fs::copy(from, to).await.and(Ok(())))
+        .await;
 
     let convert_all_blocks = fs::read_dir(&src)
         .await?
@@ -140,12 +139,12 @@ fn prefixed_component_for(path: PathBuf) -> Option<(String, String)> {
         prefix.to_case(Case::Snake),
         format!(
             "
-#[component]
-pub fn {name}() -> impl IntoView {{
-    view! {{
-        <crate::ux::SourceBox hlt=include_str!(\"{hlt}\") />
+    #[component]
+    pub fn {name}() -> impl IntoView {{
+        view! {{
+            <crate::ux::SourceBox hlt=include_str!(\"{hlt}\") />
+        }}
     }}
-}}
 "
         ),
     ))
@@ -155,7 +154,7 @@ fn gather(modstore: HashMap<String, String>) -> Vec<u8> {
     modstore
         .into_values()
         .map(|mut s| {
-            s.push_str("]\n");
+            s.push_str("}\n");
             s
         })
         .collect::<String>()

@@ -1,39 +1,3 @@
-pub mod prelude {
-    pub use super::ok_result::*;
-    // pub use super::self_to::*;
-}
-
-pub mod ok_result {
-    pub trait OptionExt<T> {
-        fn ok(self) -> Result<T, NoneError>;
-    }
-    impl<T> OptionExt<T> for Option<T> {
-        #[track_caller]
-        fn ok(self) -> Result<T, NoneError> {
-            self.ok_or(NoneError {
-                loc: std::panic::Location::caller(),
-            })
-        }
-    }
-
-    #[derive(Debug)]
-    pub struct NoneError {
-        loc: &'static std::panic::Location<'static>,
-    }
-    impl std::fmt::Display for NoneError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{}", self.loc)
-        }
-    }
-    impl std::error::Error for NoneError {}
-
-    impl From<NoneError> for std::io::Error {
-        fn from(none_error: NoneError) -> std::io::Error {
-            std::io::Error::other(none_error)
-        }
-    }
-}
-
 /// This experiment works for
 ///     let baz = String::from("bar").to(|s| s.replace("r", "z"));
 ///
@@ -50,15 +14,27 @@ pub mod ok_result {
 ///       …but it actually implements FnOnce<(&'2 String,)>, for some specific lifetime '2 (rustc)
 ///
 /// This is unfortunately currently beyond my Rust knowledge, so it's tabled for now.
-#[allow(unused)]
-pub mod self_to {
-    pub trait To {
-        fn to<T>(&self, f: impl FnOnce(&Self) -> T) -> T;
-    }
-    impl<S> To for S {
-        fn to<T>(&self, f: impl FnOnce(&Self) -> T) -> T {
-            f(self)
-        }
+///
+/// With some more work, I now have the below, which gives
+///     let term = term.to(|s| s.replace(PARENT_STYLE, PARENT_CLASS));
+///     let term = term.to(|s| DIV_CLOSE.replace_all(&s, SPAN_CLOSE));
+///         "requires that '1 outlive '2"
+/// I suspect I need to use https://doc.rust-lang.org/nightly/reference/trait-bounds.html?highlight=outlive#r-bound.lifetime
+/// fn f<'a, 'b>(x: &'a i32, mut y: &'b i32) where 'a: 'b {
+///    y = x;
+///    let r: &'b &'a i32 = &&0;
+
+pub trait To {
+    fn to<F, T>(self, f: F) -> T
+    where
+        for<'a> F: FnOnce(&'a Self) -> T + 'a;
+}
+impl<S> To for S {
+    fn to<F, T>(self: S, f: F) -> T
+    where
+        for<'a> F: FnOnce(&'a S) -> T + 'a,
+    {
+        f(&self)
     }
 }
 

@@ -1,12 +1,11 @@
 use fancy_regex::{Captures, Regex};
 use std::sync::LazyLock;
 
-pub fn termstyle(term: String) -> String {
+pub fn restyle(term: String) -> String {
     let term = term.replace(PARENT_STYLE, PARENT_CLASS);
     let term = term.replace(DIV_OPEN, SPAN_OPEN);
     let term = DIV_CLOSE.replace_all(&term, SPAN_CLOSE);
     let term = ZED_LINK.replace_all(&term, WINDOW_ALERT);
-
     STYLE_REMAPPER
         .replace_all(&term, |caps: &Captures| {
             format!(
@@ -52,3 +51,9 @@ const PARENT_CLASS: &str = "class=\"whitespace-pre\"";
 
 static STYLE_REMAPPER: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"style="([^"]*)""#).unwrap());
+
+// fn termtext(data: &Vec<u8>) -> io::Result<String> {
+//     html2text::from_read(&data[..], 100).map_err(io::Error::other)
+// }
+// fs::write(&path.with_extension(TXTERM_EXT), termtext(&source)?),
+//

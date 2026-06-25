@@ -4,43 +4,30 @@ use std::{path::PathBuf, sync::LazyLock};
 use tree_sitter_highlight::{Error, Highlight, HighlightConfiguration, Highlighter, HtmlRenderer};
 
 pub fn highlight(path: &PathBuf, source: Vec<u8>) -> Result<Vec<u8>, Error> {
-    let mut highlighter: Highlighter = Highlighter::new();
     let mut renderer: HtmlRenderer = HtmlRenderer::new();
-    let html = highlight_and_render(
-        &source,
-        &mut renderer,
-        &mut highlighter,
-        config_for_file(path).unwrap(),
-    );
+    let mut highlighter: Highlighter = Highlighter::new();
+    let config = config_for_file(path).unwrap();
+    let html = {
+        renderer.render(
+            highlighter.highlight(config, &source, None, config_for)?,
+            &source,
+            &|hl, acc| {
+                acc.extend(b"class=\"text-");
+                acc.extend(get_highlight(&hl).as_bytes());
+                acc.extend(b"\"");
+            },
+        )?;
+        Ok(std::mem::take(&mut renderer.html))
+    };
     renderer.reset();
     html
 }
 
-fn highlight_and_render<'a>(
-    source: &'a Vec<u8>,
-    renderer: &'a mut HtmlRenderer,
-    highlighter: &'a mut Highlighter,
-    config: &'a HighlightConfiguration,
-) -> Result<Vec<u8>, Error> {
-    renderer.render(
-        highlighter.highlight(config, source, None, config_for)?,
-        &source,
-        &|hl, acc| {
-            acc.extend(b"class=\"text-");
-            acc.extend(get_highlight(&hl).as_bytes());
-            acc.extend(b"\"");
-        },
-    )?;
-    Ok(std::mem::take(&mut renderer.html))
-}
-
 fn get_highlight(hl: &Highlight) -> &str {
-    NAME_COLOR_MAP
-        .get(*NAMES.get(hl.0).unwrap())
-        .unwrap_or_else(|| {
-            eprintln!("unrecognised: {}", *NAMES.get(hl.0).unwrap());
-            &"yellow"
-        })
+    NAME_COLOR_MAP.get(NAMES[hl.0]).unwrap_or_else(|| {
+        eprintln!("unrecognised: {}", NAMES[hl.0]);
+        &"yellow"
+    })
 }
 
 const NAMES: &[&str] = &[

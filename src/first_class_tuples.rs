@@ -1,3 +1,278 @@
+#[allow(non_upper_case_globals)]
+const _3tuple_ref: &[(&str, &str, &str)] = &[
+    ("foo", "oof", "ofo"),
+    ("bar", "rab", "arb"),
+    ("baz", "zab", "abz"),
+    ("qux", "xuq", "uqx"),
+];
+#[allow(non_upper_case_globals)]
+const _2tuple_ref: &[(&str, &str)] = &[
+    ("foo", "oof"),
+    ("bar", "rab"),
+    ("baz", "zab"),
+    ("qux", "xuq"),
+];
+
+pub mod by_macro {
+
+    ///  `ftup!(X::Y::foo, Z::bar, &random_fn)`
+    ///
+    /// expands to a closure like
+    ///
+    ///  `|t|
+    ///     (X::Y::foo(t.0), Z::bar(t.1), random_fn(&t.2))
+    ///   `
+    macro_rules! ftup {
+        ($(
+            $(& $([$($_:tt)* $b:tt])?)?
+            $p:path
+        ),+)  => {
+            |t| (
+                $(
+                    $p(
+                        $($($b)? &)?t.${index()})
+                ),+
+            )
+        };
+    }
+
+    fn _demonstrate() {
+        use super::{_2tuple_ref, _3tuple_ref};
+
+        let _3tuple_macro_into_owned: Vec<(String, String, String)> = _3tuple_ref
+            .into_iter()
+            .map(ftup!(Into::into, Into::into, Into::into))
+            .collect();
+        let _3tuple_macro_to_variety: Vec<_> = _3tuple_macro_into_owned
+            .into_iter()
+            .map(ftup! {&str::to_uppercase, &String::capacity, String::into_bytes})
+            .collect();
+        let _2tuple_macro_into_owned: Vec<(String, String)> = _2tuple_ref
+            .into_iter()
+            .map(ftup!(Into::into, Into::into))
+            .collect();
+        let _2tuple_macro_to_variety: Vec<_> = _2tuple_macro_into_owned
+            .clone()
+            .into_iter()
+            .map(ftup!(String::into_bytes, arbitrary_op))
+            .collect();
+
+        fn arbitrary_op(s: String) -> f64 {
+            s.char_indices()
+                .fold(0.0f64, |acc, (i, c)| acc + ((c as u32 as f64) / i as f64))
+        }
+    }
+}
+
+pub mod by_fn {
+    pub fn spread_3<A, B, C, T, U, V>(
+        (af, bf, cf): &(impl Fn(A) -> T, impl Fn(B) -> U, impl Fn(C) -> V),
+    ) -> impl Fn((A, B, C)) -> (T, U, V) {
+        |(ap, bp, cp): (A, B, C)| -> (T, U, V) { (af(ap), bf(bp), cf(cp)) }
+    }
+
+    pub fn spread_3_mut<A, B, C, T, U, V>(
+        (mut af, mut bf, mut cf): (impl FnMut(A) -> T, impl FnMut(B) -> U, impl FnMut(C) -> V),
+    ) -> impl FnMut((A, B, C)) -> (T, U, V) {
+        move |(ap, bp, cp): (A, B, C)| -> (T, U, V) { (af(ap), bf(bp), cf(cp)) }
+    }
+
+    pub fn spread_2<A, Ap, Ar, B, Bp, Br>((af, bf): &(A, B)) -> impl Fn((Ap, Bp)) -> (Ar, Br)
+    where
+        A: Fn(Ap) -> Ar + 'static,
+        B: Fn(Bp) -> Br + 'static,
+    {
+        |(ap, bp): (Ap, Bp)| -> (Ar, Br) { (af(ap), bf(bp)) }
+    }
+
+    pub fn spread_2_mut<A, Ap, Ar, B, Bp, Br>(
+        (mut af, mut bf): (A, B),
+    ) -> impl FnMut((Ap, Bp)) -> (Ar, Br)
+    where
+        A: FnMut(Ap) -> Ar,
+        B: FnMut(Bp) -> Br,
+    {
+        move |(ap, bp): (Ap, Bp)| -> (Ar, Br) { (af(ap), bf(bp)) }
+    }
+
+    pub fn spread_2_once<A, Ap, Ar, B, Bp, Br>(
+        (af, bf): (A, B),
+    ) -> impl FnOnce((Ap, Bp)) -> (Ar, Br)
+    where
+        A: FnOnce(Ap) -> Ar,
+        B: FnOnce(Bp) -> Br,
+    {
+        |(ap, bp): (Ap, Bp)| -> (Ar, Br) { (af(ap), bf(bp)) }
+    }
+
+    fn _demonstrate() {
+        use super::{_2tuple_ref, _3tuple_ref};
+
+        let verbose_vec_3tuple_owned: Vec<(String, String, String)> = _3tuple_ref
+            .to_vec()
+            .into_iter()
+            .map(|(a, b, c)| [a.into(), b.into(), c.into()].into())
+            .collect();
+        let _func_vec_3tuple_owned: Vec<(String, String, String)> = _3tuple_ref
+            .to_vec()
+            .into_iter()
+            .map(spread_3(&(str::to_string, str::to_string, str::to_string)))
+            .collect();
+
+        let _verbose_vec_3tuple_variety: Vec<_> = verbose_vec_3tuple_owned
+            .clone()
+            .into_iter()
+            .map(|(a, b, c)| (a.to_uppercase(), b.capacity(), c.into_bytes()))
+            .collect();
+
+        let _func_vec_3tuple_variety: Vec<_> = verbose_vec_3tuple_owned
+            .clone()
+            .into_iter()
+            .map(spread_3_mut((
+                |s: String| str::to_uppercase(&*s),
+                |s: String| String::capacity(&s),
+                |s: String| String::into_bytes(s.into()),
+            )))
+            .collect();
+
+        let _verbose_vec_2tuple: Vec<_> = _2tuple_ref
+            .into_iter()
+            .map(|(a, b)| (a.to_string(), b.to_string()))
+            .collect();
+        let _func_vec_2tuple: Vec<(String, String)> = _2tuple_ref
+            .to_vec()
+            .into_iter()
+            .map(spread_2(&(Into::into, Into::into)))
+            .collect();
+
+        let vec_1tuple_ref: Vec<_> = _2tuple_ref.to_vec().into_iter().map(|(a, _)| a).collect();
+
+        let _vec_1tuple_o: Vec<String> =
+            vec_1tuple_ref.clone().into_iter().map(Into::into).collect();
+    }
+}
+
+pub mod by_impl {
+    use std::{
+        any::{type_name, type_name_of_val},
+        marker::PhantomData,
+    };
+
+    pub trait TwoTupleExt<A, Ap, Ar, B, Bp, Br>
+    where
+        A: Fn(Ap) -> Ar,
+        B: Fn(Bp) -> Br,
+    {
+        fn into_fn(self) -> TwoTupleExtStruct<A, Ap, Ar, B, Bp, Br>;
+    }
+
+    pub struct TwoTupleExtStruct<A, Ap, Ar, B, Bp, Br>
+    where
+        A: Fn(Ap) -> Ar,
+        B: Fn(Bp) -> Br,
+    {
+        pub fns: (A, B),
+        ap: PhantomData<Ap>,
+        bp: PhantomData<Bp>,
+        ar: PhantomData<Ar>,
+        br: PhantomData<Br>,
+    }
+
+    impl<A, Ap, Ar, B, Bp, Br> TwoTupleExt<A, Ap, Ar, B, Bp, Br> for (A, B)
+    where
+        A: Fn(Ap) -> Ar,
+        B: Fn(Bp) -> Br,
+    {
+        fn into_fn(self) -> TwoTupleExtStruct<A, Ap, Ar, B, Bp, Br> {
+            TwoTupleExtStruct {
+                fns: self,
+                ap: PhantomData,
+                bp: PhantomData,
+                ar: PhantomData,
+                br: PhantomData,
+            }
+        }
+    }
+
+    impl<A, Ap, Ar, B, Bp, Br> FnOnce<((Ap, Bp),)> for TwoTupleExtStruct<A, Ap, Ar, B, Bp, Br>
+    where
+        A: Fn(Ap) -> Ar,
+        B: Fn(Bp) -> Br,
+    {
+        type Output = (Ar, Br);
+        extern "rust-call" fn call_once(self, (args,): ((Ap, Bp),)) -> Self::Output {
+            (self.fns.0(args.0), self.fns.1(args.1))
+        }
+    }
+
+    impl<A, Ap, Ar, B, Bp, Br> FnMut<((Ap, Bp),)> for TwoTupleExtStruct<A, Ap, Ar, B, Bp, Br>
+    where
+        A: Fn(Ap) -> Ar,
+        B: Fn(Bp) -> Br,
+    {
+        extern "rust-call" fn call_mut(&mut self, (args,): ((Ap, Bp),)) -> Self::Output {
+            (self.fns.0(args.0), self.fns.1(args.1))
+        }
+    }
+
+    impl<A, Ap, Ar, B, Bp, Br> Fn<((Ap, Bp),)> for TwoTupleExtStruct<A, Ap, Ar, B, Bp, Br>
+    where
+        A: Fn(Ap) -> Ar,
+        B: Fn(Bp) -> Br,
+    {
+        extern "rust-call" fn call(&self, (args,): ((Ap, Bp),)) -> Self::Output {
+            (self.fns.0(args.0), self.fns.1(args.1))
+        }
+    }
+
+    fn _demonstrate() {
+        let t = (str::to_uppercase, str::to_uppercase);
+        let f = t.into_fn();
+        let s = f(("abc", "def"));
+        assert_eq!(type_name_of_val(&s), type_name::<(String, String)>());
+
+        use super::_2tuple_ref;
+
+        let _vr = _2tuple_ref
+            .to_vec()
+            .into_iter()
+            .map((str::to_uppercase, str::to_lowercase).into_fn())
+            .collect::<Vec<_>>();
+
+        // not ideal, as we would prefer to write
+        //  let va = _2tuple_ref
+        //      .into_iter()
+        //      .map((str::to_uppercase, str::to_uppercase))
+        //      .collect::<Vec<_>>();
+    }
+
+    // use std::marker::Tuple;
+    // pub trait TupleExt {}
+
+    // impl<T: Tuple> Fn<T> for TupleExt<T> {
+    //     extern "rust-call" fn call(&self, args: T) -> Self::Output {
+    //         for f in self {}
+    //     }
+    // }
+
+    // pub struct TupleExtStruct {
+    //     pub fns: Tuple,
+    // }
+
+    // pub trait TwoTupleExtOnce<A, Ap, Ar, B, Bp, Br>
+    // where
+    //     A: FnOnce(Ap) -> Ar,
+    //     B: FnOnce(Bp) -> Br,
+    // {
+    // }
+    // pub trait TwoTupleExtMut<A, Ap, Ar, B, Bp, Br>
+    // where
+    //     A: FnMut(Ap) -> Ar,
+    //     B: FnMut(Bp) -> Br,
+    // {
+    // }
+}
+
 // mod first_class_tuples {
 
 //     // use std::marker::{PhantomData, Tuple};

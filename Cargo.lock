@@ -930,6 +930,7 @@ dependencies = [
  "futures-concurrency",
  "html2text",
  "macro_rules_attribute",
+ "paste",
  "phf",
  "smol",
  "smol-macros",

@@ -12,6 +12,7 @@ fancy-regex = "0.18"
 futures-concurrency = { version = "7.7.1", features = ["alloc"] }
 html2text = "0.17.1"
 macro_rules_attribute = "0.2.2"
+paste = "1.0.15"
 phf = { version = "0.13.1", features = ["macros"] }
 smol = "2.0.2"
 smol-macros = "0.1.1"

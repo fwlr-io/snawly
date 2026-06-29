@@ -1,16 +1,16 @@
 #[macro_use]
 extern crate macro_rules_attribute;
+use smol_macros::{Executor, main};
 
 use clap::{Parser, builder::ArgPredicate::IsPresent};
 use convert_case::{Case, Casing};
 use futures_concurrency::prelude::*;
 use smol::{fs, io, prelude::*, stream};
-use smol_macros::{Executor, main};
 use std::{collections::HashMap, path::PathBuf};
 
-use snawly::code;
-use snawly::ok_into_result::*;
-use snawly::term;
+use lab::ok_into_result::*;
+
+use snawly::{code, term};
 
 #[derive(Parser, Debug)]
 /// A tool for putting source code and terminal captures on the fwlr.io website.

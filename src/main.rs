@@ -56,15 +56,15 @@ struct Cli {
     code: Vec<PathBuf>,
     // A name for the terminal output file, and the tempfile containing
     // html captures of terminal output.
-    #[arg(short, long, num_args = 2, value_names = ["NAME", "TEMPFILE"], value_parser = parse_term_args)]
+    #[arg(short, long, num_args = 1.., value_name = "NAME=TEMPFILE", value_parser = parse_term_args)]
     term: Vec<(String, PathBuf)>,
 }
 fn parse_term_args(term: &str) -> io::Result<(String, PathBuf)> {
-    term.split_once(" ")
+    term.split_once("=")
         .and_then(|(name, path)| Some((String::from(name), PathBuf::from(path))))
-        .ok_or(io::Error::other(
-            "Failed parsing arguments for --term flag. Name first, then tempfile.",
-        ))
+        .ok().map_err(|e| {
+            io::Error::other(format!("{e}: Failed parsing arguments for --term flag. name=tmpfile, e.g. `snawly -t fooBar=/private/tmp`"))
+        })
 }
 
 const TERM_EXT: &str = "term";

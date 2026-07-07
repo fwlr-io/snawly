@@ -2,26 +2,40 @@ use fancy_regex::{Captures, Regex};
 use std::sync::LazyLock;
 
 pub fn restyle(term: String) -> String {
-    let term = term.replace(PARENT_STYLE, PARENT_CLASS);
-    let term = term.replace(DIV_OPEN, SPAN_OPEN);
-    let term = DIV_CLOSE.replace_all(&term, SPAN_CLOSE);
+    let term = term.trim_prefix(PARENT_OPEN).replace(DIV_OPEN, SPAN_OPEN);
+    let term = term.trim_suffix(DIV_CLOSE).replace(DIV_CLOSE, SPAN_CLOSE);
     let term = ZED_LINK.replace_all(&term, WINDOW_ALERT);
-    STYLE_REMAPPER
-        .replace_all(&term, |caps: &Captures| {
-            format!(
-                "class=\"{}\"",
-                caps[1]
-                    .split(";")
-                    .filter(|s| !s.is_empty())
-                    .filter_map(style_to_class)
-                    .collect::<Vec<String>>()
-                    .join(" ")
-            )
-        })
-        .replace(" class=\" \"", "")
+    let term = STYLE_REMAPPER.replace_all(&term, style_to_class);
+    let term = EMPTY_CLASS.replace_all(&term, "");
+    term.into()
 }
 
-fn style_to_class(p: &str) -> Option<String> {
+const PARENT_OPEN: &str = "<div style=\"font-family: monospace; white-space: pre;background-color: #1c1b19;color: #fce8c3;\">";
+const DIV_OPEN: &str = "<div style=\"display: inline;";
+const SPAN_OPEN: &str = "<span style=\"";
+
+const DIV_CLOSE: &str = "</div>";
+const SPAN_CLOSE: &str = "</span>";
+
+static ZED_LINK: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"href="zed:\/\/file\/\/Users\/scottfowler([^"]*)""#).unwrap());
+const WINDOW_ALERT: &str = "onclick='alert(\"opens `~$1` in your editor\");'";
+
+static STYLE_REMAPPER: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"style="([^"]*)""#).unwrap());
+
+fn style_to_class(caps: &Captures) -> String {
+    format!(
+        "class=\"{}\"",
+        caps[1]
+            .split(";")
+            .filter_map(to_tailwind)
+            .collect::<Vec<String>>()
+            .join(" ")
+    )
+}
+
+fn to_tailwind(p: &str) -> Option<String> {
     let (a, v) = p.split_once(":")?;
     match (a.trim(), v.trim().replace(" ", "")) {
         ("color", val) => Some(format!("text-[{val}]")),
@@ -35,25 +49,4 @@ fn style_to_class(p: &str) -> Option<String> {
     }
 }
 
-const DIV_OPEN: &str = "<div style=\"display: inline;";
-const SPAN_OPEN: &str = "<span style=\"";
-
-static DIV_CLOSE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"<\/div>(?!$)"#).unwrap());
-const SPAN_CLOSE: &str = "</span>";
-
-static ZED_LINK: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"href="zed:\/\/file\/\/Users\/scottfowler([^"]*)""#).unwrap());
-const WINDOW_ALERT: &str = "onclick='alert(\"opens `~$1` in your editor\");'";
-
-const PARENT_STYLE: &str =
-    "style=\"font-family: monospace; white-space: pre;background-color: #1c1b19;color: #fce8c3;\"";
-const PARENT_CLASS: &str = "class=\"whitespace-pre\"";
-
-static STYLE_REMAPPER: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"style="([^"]*)""#).unwrap());
-
-// fn termtext(data: &Vec<u8>) -> io::Result<String> {
-//     html2text::from_read(&data[..], 100).map_err(io::Error::other)
-// }
-// fs::write(&path.with_extension(TXTERM_EXT), termtext(&source)?),
-//
+static EMPTY_CLASS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"\s*class="\s*""#).unwrap());

@@ -8,9 +8,7 @@ use futures_concurrency::prelude::*;
 use smol::{fs, io, prelude::*, stream};
 use std::{collections::HashMap, path::PathBuf};
 
-use lab::ok_into_result::*;
-
-use snawly::{code, term};
+use snawly::{code, lab::*, term};
 
 #[derive(Parser, Debug)]
 /// A tool for putting source code and terminal captures on the fwlr.io website.

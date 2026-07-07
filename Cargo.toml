@@ -11,7 +11,6 @@ convert_case = "0.11.0"
 fancy-regex = "0.18"
 futures-concurrency = { version = "7.7.1", features = ["alloc"] }
 macro_rules_attribute = "0.2.2"
-lab = "*"
 phf = { version = "0.14.0", features = ["macros"] }
 smol = "2.0.2"
 smol-macros = "0.1.1"
@@ -31,7 +30,6 @@ tree-sitter-typescript = "0.23.2"
 tree-sitter-yaml = "0.7.2"
 
 [patch.crates-io]
-lab = { path = "../../dev/lab" }
 tree-sitter-csv = { path = "../../dev/tree-sitter/tree-sitter-csv" }
 tree-sitter-dot = { path = "../../dev/tree-sitter/tree-sitter-dot" }
 tree-sitter-rstml = { path = "../../dev/tree-sitter/tree-sitter-rstml" }
